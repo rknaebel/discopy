@@ -13,6 +13,10 @@ setup(name='discopy-rknaebel',
       author_email='rknaebel@uni-potsdam.de',
       license='MIT',
       packages=find_packages(),
+      install_requires=[
+          'numpy',
+          'nltk'
+      ],
       zip_safe=False,
       entry_points={
           'console_scripts': ['discopy=main:main'],
