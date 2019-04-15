@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import json
 import os
 import pickle
@@ -169,15 +168,18 @@ class ConnectiveClassifier:
     def predict(self, X):
         pass
 
-    def get_connective(self, parsetree, wordList, wordNum) -> (List[str], str):
+    def get_connective(self, parsetree, sentence, word_idx) -> List[str]:
         # TODO prob_classify function for confidence of classifier
-        candidate = match_connectives(wordList, wordNum)
-        if not candidate or not parsetree.leaves():
-            return [], 'N'
+        candidate = match_connectives(sentence, word_idx)
+        if not candidate:
+            return []
         else:
             conn_label = self.model.classify(
-                get_features(parsetree, list(range(wordNum, wordNum + len(candidate)))))
-            return candidate, conn_label
+                get_features(parsetree, list(range(word_idx, word_idx + len(candidate)))))
+            if conn_label is 'N':
+                return []
+            else:
+                return candidate
 
 
 if __name__ == "__main__":

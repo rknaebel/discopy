@@ -75,27 +75,27 @@ class DiscourseParser(object):
                 }
 
                 # CONNECTIVE CLASSIFIER
-                connective_candidate, conn_label = self.connClassifier.get_connective(sent_parse, sent['words'], j)
+                connective = self.connClassifier.get_connective(sent_parse, sent['words'], j)
                 # whenever a position is not identified as connective, go to the next token
-                if conn_label == 'N' or conn_label == 'False':
+                if not connective:
                     token_id += 1
                     j += 1
                     continue
 
                 relation['Connective']['TokenList'] = [(0, 0, t_doc, i, t_sent) for t_doc, t_sent in
-                                                       zip(range(token_id, token_id + len(connective_candidate)),
-                                                           range(j, j + len(connective_candidate)))]
-                relation['Connective']['RawText'] = ' '.join(connective_candidate)
+                                                       zip(range(token_id, token_id + len(connective)),
+                                                           range(j, j + len(connective)))]
+                relation['Connective']['RawText'] = ' '.join(connective)
 
                 # ARGUMENT POSITION
-                leaf_index = list(range(j, j + len(connective_candidate)))
-                arg_pos = self.argPosClassifier.get_argument_position(sent_parse, ' '.join(connective_candidate),
+                leaf_index = list(range(j, j + len(connective)))
+                arg_pos = self.argPosClassifier.get_argument_position(sent_parse, ' '.join(connective),
                                                                       leaf_index)
                 relation['ArgPos'] = arg_pos
                 # If position poorly classified as PS, go to the next token
                 if arg_pos == 'PS' and i == 0:
-                    token_id += len(connective_candidate)
-                    j += len(connective_candidate)
+                    token_id += len(connective)
+                    j += len(connective)
                     continue
 
                 # ARGUMENT EXTRACTION
@@ -113,8 +113,8 @@ class DiscourseParser(object):
                 # EXPLICIT SENSE
                 relation['Sense'] = self.explicitClassifier.get_explicit_sense(relation, sent)
                 output.append(relation)
-                token_id += len(connective_candidate)
-                j += len(connective_candidate)
+                token_id += len(connective)
+                j += len(connective)
             sent_offset += sent_len
 
         token_id = 0
