@@ -2,22 +2,15 @@ import os
 import pickle
 
 import nltk
+import numpy as np
+from nltk.tree import ParentedTree
 
-from discopy.confusion_matrix import *
-from discopy.conn_head_mapper import *
-from discopy.utils import discourse_adverbial, coordinating_connective, subordinating_connective
-
-
-def rootpath(clause):
-    path = ''
-    while clause.parent():
-        clause = clause.parent()
-        path += clause.label() + '-'
-    path = path.strip('-')
-    return path
+from discopy.conn_head_mapper import ConnHeadMapper
+from discopy.features import get_root_path
+from features import get_clause_context, get_connective_category, get_relative_position, get_clause_direction_path
 
 
-def findHead(pdtb):
+def add_connective_heads(pdtb):
     chm = ConnHeadMapper()
     for number, relation in enumerate(pdtb):
         if relation['Type'] == 'Explicit':
@@ -27,41 +20,10 @@ def findHead(pdtb):
 
 
 def lca(ptree, leaf_index):
-    lca_loc = ptree.treeposition_spanning_leaves(leaf_index[0], leaf_index[-1] + 1)[:-1]
-    if not lca_loc:
-        lca_loc = (0,)
+    lca_loc = ptree.treeposition_spanning_leaves(leaf_index[0], leaf_index[-1] + 1)
+    if type(ptree[lca_loc]) == str:
+        lca_loc = lca_loc[:-1]
     return lca_loc
-
-
-def height(phrase):
-    i = 0
-    while phrase.parent() and (phrase.parent().label() != ''):
-        phrase = phrase.parent()
-        i += 1
-    return i
-
-
-def path(conn, clause):
-    if height(conn) == height(clause):
-        return conn.label() + 'U' + conn.parent().label() + 'D' + clause.label()
-    elif height(conn) > height(clause):
-        distance = height(conn) - height(clause) + 1
-        p = conn.label()
-        parent = conn
-        while distance != 0:
-            parent = parent.parent()
-            p += 'U' + parent.label()
-            distance -= 1
-        distance = height(clause) - height(parent)
-        parent = clause
-        down = []
-        while distance != 0:
-            parent = parent.parent()
-            down.append(parent.label())
-            distance -= 1
-        d = 'D' + clause.label()
-        p += d
-        return p
 
 
 def get_index_tree(ptree):
@@ -72,85 +34,54 @@ def get_index_tree(ptree):
     return tree
 
 
-def extract_clause_features(clauses, conn_head, indices, ptree):
+def get_sibling_counts(ptree: ParentedTree):
+    if not ptree.parent():
+        return 0, 0
+    left_siblings = ptree.parent_index()
+    right_siblings = len(ptree.parent()) - left_siblings - 1
+    return left_siblings, right_siblings
+
+
+def get_features(clauses, conn_head, indices, ptree):
     features = []
-    if len(indices) == 1:
-        lca_loc = ptree.leaf_treeposition(indices[0])[:-1]
-        c = ptree[lca_loc]
-        left_sib_no = 0
-        while c.left_sibling():
-            c = c.left_sibling()
-            left_sib_no += 1
-        c = ptree[lca_loc]
-        right_sib_no = 0
-        while c.right_sibling():
-            c = c.right_sibling()
-            right_sib_no += 1
-        connective = ptree[lca_loc]
-    else:
-        lca_loc = lca(ptree, indices)
-        conn_last_word = ptree.leaf_treeposition(indices[-1])[:-1]
-        conn_first_word = ptree.leaf_treeposition(indices[0])[:-1]
-        c = ptree[conn_first_word]
-        left_sib_no = 0
-        while c.left_sibling():
-            c = c.left_sibling()
-            left_sib_no += 1
-        c = ptree[conn_last_word]
-        right_sib_no = 0
-        while c.right_sibling():
-            c = c.right_sibling()
-            right_sib_no += 1
-        connective = ptree[lca_loc]
-    if conn_head in discourse_adverbial:
-        conn_cat = 'Adverbial'
-    elif conn_head in coordinating_connective:
-        conn_cat = 'Coordinating'
-    elif conn_head in subordinating_connective:
-        conn_cat = 'Subordinating'
-    else:
-        conn_cat = None
+    lca_loc = lca(ptree, indices)
+    connective = ptree[lca_loc]
+
+    left_siblings_no, right_siblings_no = get_sibling_counts(ptree[lca_loc])
+
+    conn_cat = get_connective_category(conn_head)
 
     conn_pos = ptree.treeposition_spanning_leaves(indices[0], max(indices[0] + 1, indices[-1]))[:-1]
 
     for num, (clause, n_pos) in enumerate(clauses):
         relative_position = get_relative_position(n_pos, conn_pos)
-        clause_pos = clause.label()
-        clause_parent_pos = clause.parent().label()
-        if clause.left_sibling():
-            clause_ls_pos = clause.left_sibling().label()
-        else:
-            clause_ls_pos = 'NULL'
-        if clause.right_sibling():
-            clause_rs_pos = clause.right_sibling().label()
-        else:
-            clause_rs_pos = 'NULL'
-        clause_context = clause_pos + '-' + clause_parent_pos + '-' + clause_ls_pos + '-' + clause_rs_pos
+        clause_context = get_clause_context(clause)
 
-        conn2clause_path = path(connective, clause)
-        conn2root_path = rootpath(clause)
+        conn2clause_path = get_clause_direction_path(connective, clause)
+        conn2root_path = get_root_path(clause)
 
-        featureVector = {'connectiveString': conn_head, 'connectivePOS': connective.label(), 'leftSibNo': left_sib_no,
-                         'rightSibNo': right_sib_no, 'connCategory': conn_cat, 'clauseRelPosition': relative_position,
-                         'clauseContext': clause_context, 'conn2clausePath': conn2clause_path,
-                         'conn2rootPath': conn2root_path}
+        feat = {'connectiveString': conn_head, 'connectivePOS': connective.label(), 'leftSibNo': left_siblings_no,
+                'rightSibNo': right_siblings_no, 'connCategory': conn_cat, 'clauseRelPosition': relative_position,
+                'clauseContext': clause_context, 'conn2clausePath': conn2clause_path,
+                'conn2rootPath': conn2root_path}
 
         clause = ' '.join(clause.leaves())
-        features.append((featureVector, clause))
+        features.append((feat, clause))
     return features
 
 
 def extract_ss_arguments(clauses, conn_head, indices, ptree, arg1, arg2):
     feature_set = []
-    clause_features = extract_clause_features(clauses, conn_head, indices, ptree)
-    for f in clause_features:
-        if f[1] in arg1:
+    clause_features = get_features(clauses, conn_head, indices, ptree)
+    for feature, clause in clause_features:
+        # TODO comparison is not correct. replace by tree position
+        if clause in arg1:
             label = 'Arg1'
-        elif f[1] in arg2:
+        elif clause in arg2:
             label = 'Arg2'
         else:
             label = 'NULL'
-        feature_set.append((f[0], label))
+        feature_set.append((feature, label))
     return feature_set
 
 
@@ -160,13 +91,14 @@ def extract_ps_arguments(clauses, conn_head, indices, ptree, arg2):
     sentence as Arg1, which already gives good results in argument extraction
     """
     feature_set = []
-    clause_features = extract_clause_features(clauses, conn_head, indices, ptree)
-    for f in clause_features:
-        if f[1] in arg2:
+    clause_features = get_features(clauses, conn_head, indices, ptree)
+    for feature, clause in clause_features:
+        # TODO comparison is not correct. replace by tree position
+        if clause in arg2:
             label = 'Arg2'
         else:
             label = 'NULL'
-        feature_set.append((f[0], label))
+        feature_set.append((feature, label))
     return feature_set
 
 
@@ -174,7 +106,7 @@ def generate_pdtb_features(pdtb, parses):
     ss_features = []
     ps_features = []
 
-    findHead(pdtb)
+    add_connective_heads(pdtb)
 
     for relation in filter(lambda i: i['Type'] == 'Explicit', pdtb):
         doc_id = relation['DocID']
@@ -200,16 +132,6 @@ def generate_pdtb_features(pdtb, parses):
                 extract_ps_arguments(clauses, relation['ConnectiveHead'], indices, ptree,
                                      relation['Arg2']['RawText']))
     return ss_features, ps_features
-
-
-def get_relative_position(pos1, pos2):
-    for i in range(min(len(pos1), len(pos2))):
-        if pos1[i] < pos2[i]:
-            return 'left'
-        if pos1[i] > pos2[i]:
-            return 'right'
-    # if pos2 is contained by pos1
-    return 'contains'
 
 
 class ArgumentExtractClassifier:
@@ -241,7 +163,7 @@ class ArgumentExtractClassifier:
         chm = ConnHeadMapper()
         conn_head, _ = chm.map_raw_connective(relation['Connective']['RawText'])
         clauses = [(ptree[pos], pos) for pos in ptree.treepositions() if type(ptree[pos]) != str and len(pos) > 0]
-        features = [i[0] for i in extract_clause_features(clauses, conn_head, indices, ptree)]
+        features = [i[0] for i in get_features(clauses, conn_head, indices, ptree)]
 
         if relation['ArgPos'] == 'SS':
             preds = self.ss_model.prob_classify_many(features)
