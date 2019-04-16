@@ -19,18 +19,20 @@ class DiscourseParser(object):
         self.explicit_clf = ExplicitSenseClassifier()
         self.non_explicit_clf = NonExplicitSenseClassifier()
 
-    def train(self, pdtb_dir, parses_dir):
+    def train(self, pdtb_dir, parses_dir, epochs=10):
         print('Load PDTB and WSJ')
         pdtb_train = [json.loads(s) for s in open(pdtb_dir, 'r').readlines()]
         parses_train = json.loads(open(parses_dir).read())
         print('Train Connective Classifier...')
-        self.connective_clf.fit(pdtb_train, parses_train)
+        self.connective_clf.fit(pdtb_train, parses_train, max_iter=epochs)
         print('Train ArgPosition Classifier...')
-        self.arg_pos_clf.fit(pdtb_train, parses_train)
+        self.arg_pos_clf.fit(pdtb_train, parses_train, max_iter=epochs)
         print('Train Argument Extractor...')
-        self.arg_extract_clf.fit(pdtb_train, parses_train)
+        self.arg_extract_clf.fit(pdtb_train, parses_train, max_iter=epochs)
         print('Train Explicit Sense Classifier...')
-        self.explicit_clf.fit(pdtb_train, parses_train)
+        self.explicit_clf.fit(pdtb_train, parses_train, max_iter=epochs)
+        print('Train Non-Explicit Sense Classifier...')
+        self.non_explicit_clf.fit(pdtb_train, parses_train, max_iter=epochs)
 
     def save(self, path):
         self.connective_clf.save(path)
@@ -74,8 +76,6 @@ class DiscourseParser(object):
                     'Arg1': {},
                     'Arg2': {},
                     'Type': 'Explicit',
-                    'Sent1': 0,
-                    'Sent2': 0,
                 }
 
                 # CONNECTIVE CLASSIFIER
@@ -115,7 +115,7 @@ class DiscourseParser(object):
                     relation['Arg2']['TokenList'] = [i + token_id - j for i in arg2]
 
                 # EXPLICIT SENSE
-                relation['Sense'] = self.explicit_clf.get_sense(relation, sent)
+                relation['Sense'] = self.explicit_clf.get_sense(relation, sent_parse)
                 output.append(relation)
                 token_id += len(connective)
                 j += len(connective)

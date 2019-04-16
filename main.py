@@ -14,6 +14,8 @@ argument_parser.add_argument("--pdtb", help="",
                              default='results')
 argument_parser.add_argument("--parses", help="",
                              default='results')
+argument_parser.add_argument("--epochs", help="",
+                             default=10)
 argument_parser.add_argument("--out", help="",
                              default='output.json')
 args = argument_parser.parse_args()
@@ -23,7 +25,7 @@ def main():
     parser = DiscourseParser()
 
     if args.mode == 'train':
-        parser.train(args.pdtb, args.parses)
+        parser.train(args.pdtb, args.parses, epochs=args.epochs)
         if not os.path.exists(args.dir):
             os.mkdir(args.dir)
         parser.save(args.dir)
