@@ -1,4 +1,6 @@
-from utils import discourse_adverbial, coordinating_connective, subordinating_connective
+from nltk import ParentedTree
+
+from discopy.utils import discourse_adverbial, coordinating_connective, subordinating_connective
 
 
 def get_root_path(clause) -> str:
@@ -75,3 +77,18 @@ def get_clause_direction_path(conn, clause):
         d = 'D' + clause.label()
         p += d
         return p
+
+
+def get_sibling_counts(ptree: ParentedTree):
+    if not ptree.parent():
+        return 0, 0
+    left_siblings = ptree.parent_index()
+    right_siblings = len(ptree.parent()) - left_siblings - 1
+    return left_siblings, right_siblings
+
+
+def get_clauses(ptree):
+    clauses = ((ptree[pos], pos) for pos in ptree.treepositions() if type(ptree[pos]) != str and len(pos) > 0)
+    clauses = [(subtree, pos) for subtree, pos in clauses if
+               subtree.height() > 2 and subtree.label() in ['VP', 'S', 'SBAR']]
+    return clauses

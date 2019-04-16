@@ -3,11 +3,13 @@ import pickle
 
 import nltk
 import numpy as np
-from nltk.tree import ParentedTree
+from srsly import ujson
 
 from discopy.conn_head_mapper import ConnHeadMapper
+from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
+    get_clause_direction_path
 from discopy.features import get_root_path
-from features import get_clause_context, get_connective_category, get_relative_position, get_clause_direction_path
+from features import get_sibling_counts, get_clauses
 
 
 def add_connective_heads(pdtb):
@@ -32,14 +34,6 @@ def get_index_tree(ptree):
         tree_location = tree.leaf_treeposition(idx)
         tree[tree_location[:-1]][0] = idx
     return tree
-
-
-def get_sibling_counts(ptree: ParentedTree):
-    if not ptree.parent():
-        return 0, 0
-    left_siblings = ptree.parent_index()
-    right_siblings = len(ptree.parent()) - left_siblings - 1
-    return left_siblings, right_siblings
 
 
 def get_features(clauses, conn_head, indices, ptree):
@@ -119,7 +113,7 @@ def generate_pdtb_features(pdtb, parses):
             continue
 
         indices = [token[4] for token in relation['Connective']['TokenList']]
-        clauses = [(ptree[pos], pos) for pos in ptree.treepositions() if type(ptree[pos]) != str and len(pos) > 0]
+        clauses = get_clauses(ptree)
 
         # Arg1 is in the same sentence (SS)
         if arg1_sentence_id == arg2_sentence_id:
@@ -162,7 +156,8 @@ class ArgumentExtractClassifier:
         indices = [token[4] for token in relation['Connective']['TokenList']]
         chm = ConnHeadMapper()
         conn_head, _ = chm.map_raw_connective(relation['Connective']['RawText'])
-        clauses = [(ptree[pos], pos) for pos in ptree.treepositions() if type(ptree[pos]) != str and len(pos) > 0]
+        clauses = get_clauses(ptree)
+
         features = [i[0] for i in get_features(clauses, conn_head, indices, ptree)]
 
         if relation['ArgPos'] == 'SS':
@@ -187,15 +182,17 @@ class ArgumentExtractClassifier:
 
 
 if __name__ == "__main__":
-    trainpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    trainparses = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    devpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    devparses = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    trainpdtb = [ujson.loads(s) for s in
+                 open('../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
+    trainparses = ujson.loads(open('../discourse/data/conll2016/en.train/parses.json').read())
+    devpdtb = [ujson.loads(s) for s in open('../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
+    devparses = ujson.loads(open('../discourse/data/conll2016/en.dev/parses.json').read())
 
     print('....................................................................TRAINING..................')
     clf = ArgumentExtractClassifier()
     train_ss_data, train_ps_data = generate_pdtb_features(trainpdtb, trainparses)
-    clf.fit_on_features(train_ss_data, train_ps_data)
+    clf.fit_on_features(train_ss_data, train_ps_data, max_iter=5)
+    clf.save('tmp')
     print('....................................................................ON TRAINING DATA..................')
     print('ACCURACY {}'.format(nltk.classify.accuracy(clf.ss_model, train_ss_data)))
     print('ACCURACY {}'.format(nltk.classify.accuracy(clf.ps_model, train_ps_data)))
