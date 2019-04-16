@@ -1,9 +1,9 @@
+import json
 import os
 import pickle
 
 import nltk
 
-from discopy.confusion_matrix import *
 from discopy.conn_head_mapper import ConnHeadMapper
 
 
@@ -138,7 +138,7 @@ class ExplicitSenseClassifier:
     def predict(self, X):
         pass
 
-    def get_explicit_sense(self, relation, sent):
+    def get_sense(self, relation, sent):
         features = extract_features(relation, sent)
         return [self.model.classify(features)]
 

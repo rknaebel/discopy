@@ -1,9 +1,9 @@
+import json
 import os
 import pickle
 
 import nltk
 import numpy as np
-from srsly import ujson
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
@@ -182,11 +182,11 @@ class ArgumentExtractClassifier:
 
 
 if __name__ == "__main__":
-    trainpdtb = [ujson.loads(s) for s in
+    trainpdtb = [json.loads(s) for s in
                  open('../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    trainparses = ujson.loads(open('../discourse/data/conll2016/en.train/parses.json').read())
-    devpdtb = [ujson.loads(s) for s in open('../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    devparses = ujson.loads(open('../discourse/data/conll2016/en.dev/parses.json').read())
+    trainparses = json.loads(open('../discourse/data/conll2016/en.train/parses.json').read())
+    devpdtb = [json.loads(s) for s in open('../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
+    devparses = json.loads(open('../discourse/data/conll2016/en.dev/parses.json').read())
 
     print('....................................................................TRAINING..................')
     clf = ArgumentExtractClassifier()

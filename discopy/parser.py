@@ -7,40 +7,44 @@ from discopy.argument_extract import ArgumentExtractClassifier
 from discopy.argument_position import ArgumentPositionClassifier
 from discopy.connective import ConnectiveClassifier
 from discopy.explicit import ExplicitSenseClassifier
+from discopy.nonexplicit import NonExplicitSenseClassifier
 
 
 class DiscourseParser(object):
 
     def __init__(self):
-        self.connClassifier = ConnectiveClassifier()
-        self.argPosClassifier = ArgumentPositionClassifier()
-        self.argExtractClassifier = ArgumentExtractClassifier()
-        self.explicitClassifier = ExplicitSenseClassifier()
+        self.connective_clf = ConnectiveClassifier()
+        self.arg_pos_clf = ArgumentPositionClassifier()
+        self.arg_extract_clf = ArgumentExtractClassifier()
+        self.explicit_clf = ExplicitSenseClassifier()
+        self.non_explicit_clf = NonExplicitSenseClassifier()
 
     def train(self, pdtb_dir, parses_dir):
         print('Load PDTB and WSJ')
         pdtb_train = [json.loads(s) for s in open(pdtb_dir, 'r').readlines()]
         parses_train = json.loads(open(parses_dir).read())
         print('Train Connective Classifier...')
-        self.connClassifier.fit(pdtb_train, parses_train)
+        self.connective_clf.fit(pdtb_train, parses_train)
         print('Train ArgPosition Classifier...')
-        self.argPosClassifier.fit(pdtb_train, parses_train)
+        self.arg_pos_clf.fit(pdtb_train, parses_train)
         print('Train Argument Extractor...')
-        self.argExtractClassifier.fit(pdtb_train, parses_train)
+        self.arg_extract_clf.fit(pdtb_train, parses_train)
         print('Train Explicit Sense Classifier...')
-        self.explicitClassifier.fit(pdtb_train, parses_train)
+        self.explicit_clf.fit(pdtb_train, parses_train)
 
     def save(self, path):
-        self.connClassifier.save(path)
-        self.argPosClassifier.save(path)
-        self.argExtractClassifier.save(path)
-        self.explicitClassifier.save(path)
+        self.connective_clf.save(path)
+        self.arg_pos_clf.save(path)
+        self.arg_extract_clf.save(path)
+        self.explicit_clf.save(path)
+        self.non_explicit_clf.save(path)
 
     def load(self, path):
-        self.connClassifier.load(path)
-        self.argPosClassifier.load(path)
-        self.argExtractClassifier.load(path)
-        self.explicitClassifier.load(path)
+        self.connective_clf.load(path)
+        self.arg_pos_clf.load(path)
+        self.arg_extract_clf.load(path)
+        self.explicit_clf.load(path)
+        self.non_explicit_clf.load(path)
 
     def parse_file(self, input_file):
         documents = json.loads(codecs.open(input_file, mode='rb', encoding='utf-8').read())
@@ -75,7 +79,7 @@ class DiscourseParser(object):
                 }
 
                 # CONNECTIVE CLASSIFIER
-                connective = self.connClassifier.get_connective(sent_parse, sent['words'], j)
+                connective = self.connective_clf.get_connective(sent_parse, sent['words'], j)
                 # whenever a position is not identified as connective, go to the next token
                 if not connective:
                     token_id += 1
@@ -89,8 +93,8 @@ class DiscourseParser(object):
 
                 # ARGUMENT POSITION
                 leaf_index = list(range(j, j + len(connective)))
-                arg_pos = self.argPosClassifier.get_argument_position(sent_parse, ' '.join(connective),
-                                                                      leaf_index)
+                arg_pos = self.arg_pos_clf.get_argument_position(sent_parse, ' '.join(connective),
+                                                                 leaf_index)
                 relation['ArgPos'] = arg_pos
                 # If position poorly classified as PS, go to the next token
                 if arg_pos == 'PS' and i == 0:
@@ -106,12 +110,12 @@ class DiscourseParser(object):
                     relation['Arg2']['TokenList'] = list(range(sent_offset, (sent_offset + sent_len) - 1))
                     inter_relations.add(i)
                 elif arg_pos == 'SS':
-                    arg1, arg2 = self.argExtractClassifier.extract_arguments(sent_parse, relation)
+                    arg1, arg2 = self.arg_extract_clf.extract_arguments(sent_parse, relation)
                     relation['Arg1']['TokenList'] = [i + token_id - j for i in arg1]
                     relation['Arg2']['TokenList'] = [i + token_id - j for i in arg2]
 
                 # EXPLICIT SENSE
-                relation['Sense'] = self.explicitClassifier.get_explicit_sense(relation, sent)
+                relation['Sense'] = self.explicit_clf.get_sense(relation, sent)
                 output.append(relation)
                 token_id += len(connective)
                 j += len(connective)
@@ -123,22 +127,22 @@ class DiscourseParser(object):
                 token_id += len(sent['words'])
                 continue
 
-            sent_prev = doc['sentences'][i - 1]
+            sent_parse = nltk.ParentedTree.fromstring(sent['parsetree'])
+            sent_prev_parse = nltk.ParentedTree.fromstring(doc['sentences'][i - 1]['parsetree'])
 
             relation = {
                 'Connective': {
                     'TokenList': []
                 },
                 'Arg1': {
-                    'TokenList': list(range((token_id - len(sent_prev['words'])), token_id - 1))
+                    'TokenList': list(range((token_id - len(sent_prev_parse.leaves())), token_id - 1))
                 },
                 'Arg2': {
-                    'TokenList': list(range(token_id, (token_id + len(sent['words']) - 1)))
+                    'TokenList': list(range(token_id, (token_id + len(sent_parse.leaves()) - 1)))
                 },
-                'Type': 'Implicit'
+                'Type': 'Implicit',
+                'Sense': self.non_explicit_clf.get_sense([sent_prev_parse, sent_parse]),
             }
-            # TODO add implicit sense classification
-            relation['Sense'] = [None]
             output.append(relation)
 
             token_id += len(sent['words'])
