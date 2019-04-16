@@ -5,7 +5,7 @@ import pickle
 import nltk
 
 import discopy.conn_head_mapper
-from discopy.utils import fscore_conf
+
 
 
 def get_features(ptree, c, leaf_index):
@@ -144,9 +144,7 @@ if __name__ == "__main__":
     clf = ArgumentPositionClassifier()
     clf.fit_on_features(trainfeatureSet, max_iter=5)
     print('......................................ON TRAINING DATA..................')
-    fscore_conf(clf.pos_model, trainfeatureSet)
     print('Accuracy = ', nltk.classify.accuracy(clf.pos_model, trainfeatureSet))
 
     print('......................................ON DEVELOPMENT DATA..................')
-    fscore_conf(clf.pos_model, devfeatureSet)
     print('Accuracy = ', nltk.classify.accuracy(clf.pos_model, devfeatureSet))

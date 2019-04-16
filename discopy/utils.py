@@ -1,5 +1,3 @@
-from discopy.confusion_matrix import ConfusionMatrix
-
 #
 # argument extractor
 #
@@ -86,16 +84,3 @@ distant_connectives = list(map(lambda s: s.split(' '), [
 
 multi_connectives_first = {'as', 'before', 'by', 'for', 'either', 'if', 'in', 'insofar', 'much', 'neither',
                            'now', 'on', 'so', 'when'}
-
-
-def fscore_conf(classifier, testSet):
-    conf_obj = ConfusionMatrix()
-    true_label = []
-    predicted_label = []
-    for i in testSet:
-        true_label.append(i[1])
-        predicted_label.append(classifier.classify(i[0]))
-    conf_obj.add_list(predicted_label, true_label)
-    conf_obj.print_matrix()
-    f1_score = conf_obj.compute_average_f1()
-    print('F1 score = ', f1_score)

@@ -9,7 +9,7 @@ from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
     get_clause_direction_path
 from discopy.features import get_root_path
-from features import get_sibling_counts, get_clauses
+from discopy.features import get_sibling_counts, get_clauses
 
 
 def add_connective_heads(pdtb):
