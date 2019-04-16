@@ -6,7 +6,7 @@ import nltk
 from nltk.tree import ParentedTree
 
 import discopy.conn_head_mapper
-from features import get_connective_sentence_position, lca, get_pos_features
+from discopy.features import get_connective_sentence_position, lca, get_pos_features
 
 
 def get_features(ptree: ParentedTree, connective: str, leaf_index: list):
