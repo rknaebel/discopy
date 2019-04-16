@@ -3,108 +3,51 @@ import os
 import pickle
 
 import nltk
+from nltk.tree import ParentedTree
 
 import discopy.conn_head_mapper
+from features import get_connective_sentence_position, lca, get_pos_features
 
 
-
-def get_features(ptree, c, leaf_index):
-    leaves = ptree.leaves()
+def get_features(ptree: ParentedTree, connective: str, leaf_index: list):
     chm = discopy.conn_head_mapper.ConnHeadMapper()
-    head, connectiveHead_index = chm.map_raw_connective(c)
-    connectiveHead_index = [leaf_index[i] for i in connectiveHead_index]
+    head, connective_head_index = chm.map_raw_connective(connective)
+    connective_head_index = [leaf_index[i] for i in connective_head_index]
 
-    lca_loc = ptree.treeposition_spanning_leaves(leaf_index[0], leaf_index[-1] + 1)[:-1]
-    if not lca_loc:
-        lca_loc = (0,)
+    lca_loc = lca(ptree, leaf_index)
+    conn_tag = ptree[lca_loc].label()
+    conn_pos_relative = get_connective_sentence_position(connective_head_index, ptree)
 
-    cPOS = ptree[lca_loc].label()
+    prev, prev_conn, prev_pos, prev_pos_conn_pos = get_pos_features(ptree, leaf_index, head, -1)
+    prev2, prev2_conn, prev2_pos, prev2_pos_conn_pos = get_pos_features(ptree, leaf_index, head, -2)
 
-    sentenceLen = len(leaves)
-    m1 = sentenceLen * (1 / 3)
-    m2 = sentenceLen * (2 / 3)
-
-    if connectiveHead_index[len(connectiveHead_index) // 2] < m1:
-        cPosition = 'START'
-    elif connectiveHead_index[len(connectiveHead_index) // 2] >= m1 and connectiveHead_index[
-        len(connectiveHead_index) // 2] < m2:
-        cPosition = 'MIDDLE'
-    else:
-        cPosition = 'END'
-
-    prev = leaf_index[0] - 1
-    prev2 = prev - 1
-    pl = ptree.pos()
-
-    if prev >= 0:
-        prevC = [pl[prev][0], head]
-        prevC = ', '.join(prevC)
-        prevPOS = pl[prev][1]
-        prevPOScPOS = [pl[prev][1], cPOS]
-        prevPOScPOS = ', '.join(prevPOScPOS)
-        prev = pl[prev][0]
-    else:
-        prevC = ['NONE', head]
-        prevC = ', '.join(prevC)
-        prevPOS = 'NONE'
-        prevPOScPOS = ['NONE', cPOS]
-        prevPOScPOS = ', '.join(prevPOScPOS)
-        prev = 'NONE'
-
-    if prev2 >= 0:
-        prev2C = [pl[prev2][0], head]
-        prev2C = ', '.join(prev2C)
-        prev2POS = pl[prev2][1]
-        prev2POScPOS = [pl[prev2][1], cPOS]
-        prev2POScPOS = ', '.join(prev2POScPOS)
-        prev2 = pl[prev2][0]
-
-    else:
-        prev2C = ['NONE', head]
-        prev2C = ', '.join(prev2C)
-        prev2POS = 'NONE'
-        prev2POScPOS = ['NONE', cPOS]
-        prev2POScPOS = ', '.join(prev2POScPOS)
-        prev2 = 'NONE'
-
-    feat = {'connective': head, 'connectivePOS': cPOS, 'cPosition': cPosition, 'prevWord+c': prevC,
-            'prevPOSTag': prevPOS, 'prevPOS+cPOS': prevPOScPOS, 'prevWord': prev, 'prev2Word+c': prev2C,
-            'prev2POSTag': prev2POS, 'prev2POS+cPOS': prev2POScPOS, 'prevWord2': prev2}
+    feat = {'connective': head, 'connectivePOS': conn_tag, 'cPosition': conn_pos_relative, 'prevWord+c': prev_conn,
+            'prevPOSTag': prev_pos, 'prevPOS+cPOS': prev_pos_conn_pos, 'prevWord': prev, 'prev2Word+c': prev2_conn,
+            'prev2POSTag': prev2_pos, 'prev2POS+cPOS': prev2_pos_conn_pos, 'prevWord2': prev2}
 
     return feat
 
 
 def generate_pdtb_features(pdtb, parses):
-    featureSet = []
+    features = []
     for relation in filter(lambda i: i['Type'] == 'Explicit', pdtb):
         doc = relation['DocID']
         connective = relation['Connective']['TokenList']
-        connectiveRawText = relation['Connective']['RawText']
-        sentenceOffset = connective[0][3]
-        connectiveTokens = [token[4] for token in connective]
-        ptree = parses[doc]['sentences'][sentenceOffset]['parsetree']
+        connective_raw = relation['Connective']['RawText']
+        leaf_indices = [token[4] for token in connective]
+        ptree = parses[doc]['sentences'][connective[0][3]]['parsetree']
         ptree = nltk.ParentedTree.fromstring(ptree)
 
         if not ptree.leaves():
             continue
-        arg1Set = set()
-        arg2Set = set()
-        for i in relation['Arg1']['TokenList']:
-            arg1Set.add(i[3])
-        for i in relation['Arg2']['TokenList']:
-            arg2Set.add(i[3])
 
-        arg1 = list(arg1Set)
-        arg2 = list(arg2Set)
-        arg1.sort()
-        arg2.sort()
+        arg1 = sorted({i[3] for i in relation['Arg1']['TokenList']})
+        arg2 = sorted({i[3] for i in relation['Arg2']['TokenList']})
         if arg1[-1] < arg2[0]:
-            featureSet.append((get_features(ptree, connectiveRawText, connectiveTokens), 'PS'))
-
-        if len(arg1Set) == 1 and len(arg2Set) == 1:
-            if arg1Set.pop() == arg2Set.pop():
-                featureSet.append((get_features(ptree, connectiveRawText, connectiveTokens), 'SS'))
-    return featureSet
+            features.append((get_features(ptree, connective_raw, leaf_indices), 'PS'))
+        elif len(arg1) == 1 and len(arg2) == 1 and arg1[0] == arg2[0]:
+            features.append((get_features(ptree, connective_raw, leaf_indices), 'SS'))
+    return features
 
 
 class ArgumentPositionClassifier:

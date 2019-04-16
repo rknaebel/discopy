@@ -92,3 +92,39 @@ def get_clauses(ptree):
     clauses = [(subtree, pos) for subtree, pos in clauses if
                subtree.height() > 2 and subtree.label() in ['VP', 'S', 'SBAR']]
     return clauses
+
+
+def get_connective_sentence_position(indices, ptree):
+    length = len(ptree.leaves())
+    m1 = length * (1 / 3)
+    m2 = length * (2 / 3)
+    if indices[len(indices) // 2] < m1:
+        pos = 'START'
+    elif m1 <= indices[len(indices) // 2] < m2:
+        pos = 'MIDDLE'
+    else:
+        pos = 'END'
+    return pos
+
+
+def lca(ptree, leaf_index):
+    lca_loc = ptree.treeposition_spanning_leaves(leaf_index[0], leaf_index[-1] + 1)
+    if type(ptree[lca_loc]) == str:
+        lca_loc = lca_loc[:-1]
+    return lca_loc
+
+
+def get_pos_features(ptree, leaf_index, head, position):
+    pl = ptree.pos()
+    other_position = leaf_index[0] + position
+    lca_loc = lca(ptree, leaf_index)
+    conn_tag = ptree[lca_loc].label()
+
+    if other_position >= 0:
+        word, pos = pl[other_position]
+    else:
+        word = pos = 'NONE'
+    word_head = "{},{}".format(word, head)
+    pos_conn_tag = "{},{}".format(pos, conn_tag)
+
+    return word, word_head, pos, pos_conn_tag
