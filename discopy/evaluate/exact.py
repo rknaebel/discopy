@@ -94,30 +94,6 @@ class ConfusionMatrix(object):
         i = self.alphabet.get_index(class_name)
         return self.get_prf_for_i(i)
 
-    def compute_micro_average_f1(self):
-        total_correct = 0.0
-        for i in range(self.alphabet.size()):
-            total_correct += self.matrix[i, i]
-        negative_index = self.alphabet.get_index(self.NEGATIVE_CLASS)
-        total_predicted = np.sum([x for i, x in enumerate(self.matrix.sum(1)) \
-                                  if negative_index == -1 or i != negative_index])
-        total_gold = np.sum([x for i, x in enumerate(self.matrix.sum(0)) \
-                             if negative_index == -1 or i != negative_index])
-
-        if total_predicted == 0:
-            precision = 1.0
-        else:
-            precision = total_correct / total_predicted
-        if total_gold == 0:
-            recall = 1.0
-        else:
-            recall = total_correct / total_gold
-        if precision + recall != 0.0:
-            f1_score = 2.0 * (precision * recall) / (precision + recall)
-        else:
-            f1_score = 0.0
-        return round(precision, 4), round(recall, 4), round(f1_score, 4)
-
     def compute_average_f1(self):
         precision, recall, f1 = self.get_prf_for_all()
         return np.mean(f1)
@@ -127,18 +103,6 @@ class ConfusionMatrix(object):
         return (round(np.mean(precision), 4),
                 round(np.mean(recall), 4),
                 round(np.mean(f1), 4))
-
-    def print_matrix(self):
-        num_classes = self.alphabet.size()
-        # header for the confusion matrix
-        header = [' '] + [self.alphabet.get_label(i) for i in range(num_classes)]
-        rows = []
-        # putting labels to the first column of rhw matrix
-        for i in range(num_classes):
-            row = [self.alphabet.get_label(i)] + [str(self.matrix[i, j]) for j in range(num_classes)]
-            rows.append(row)
-        print("row = predicted, column = truth")
-        print(matrix_to_string(rows, header))
 
     def print_summary(self):
 
@@ -157,6 +121,7 @@ class ConfusionMatrix(object):
         # compute precision, recall, and f1
         for i in range(self.alphabet.size()):
             precision[i], recall[i], f1[i] = self.get_prf_for_i(i)
+            print(self.get_prf_for_i(i))
             correct += self.matrix[i, i]
             label = self.alphabet.get_label(i)
             if label != self.NEGATIVE_CLASS:
@@ -167,13 +132,8 @@ class ConfusionMatrix(object):
         space = ' ' * (max_len - 14 + 1)
         lines.append('*Micro-Average%s precision %1.4f\trecall %1.4f\tF1 %1.4f' % (
             space, np.mean(precision), np.mean(recall), np.mean(f1)))
-        lines.sort()
+        # lines.sort()
         print('\n'.join(lines))
-
-    def print_out(self):
-        """Printing out confusion matrix along with Macro-F1 score"""
-        self.print_matrix()
-        self.print_summary()
 
 
 class Alphabet(object):
@@ -269,6 +229,10 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict):
 
         connective_cm = evaluate_connectives(gold_list, predicted_list)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list)
+        sense_cm = evaluate_sense(gold_list, predicted_list)
+
+        if sense_cm.compute_average_prf()[1] > 1:
+            sense_cm.print_summary()
 
         results.append(
             np.array([
@@ -276,6 +240,7 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict):
                 arg1_cm.get_prf('yes'),
                 arg2_cm.get_prf('yes'),
                 rel_arg_cm.get_prf('yes'),
+                sense_cm.compute_average_prf(),
             ])
         )
 
@@ -286,82 +251,11 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict):
     print('================================================')
     print('Evaluation for {} discourse relations:'.format('ALL'))
     print('================================================')
-    print('Conn extractor:               P {:06.4} R {:06.4} F1 {:06.4}'.format(*res_mean[0]))
-    print('Arg1 extractor:               P {:06.4} R {:06.4} F1 {:06.4}'.format(*res_mean[1]))
-    print('Arg2 extractor:               P {:06.4} R {:06.4} F1 {:06.4}'.format(*res_mean[2]))
-    print('Concat(Arg1, Arg2) extractor: P {:06.4} R {:06.4} F1 {:06.4}'.format(*res_mean[3]))
-
-
-    # print('Explicit connectives         : Precision %1.4f Recall %1.4f F1 %1.4f' % connective_cm.get_prf('yes'))
-    # print('Arg 1 extractor              : Precision %1.4f Recall %1.4f F1 %1.4f' % arg1_cm.get_prf('yes'))
-    # print('Arg 2 extractor              : Precision %1.4f Recall %1.4f F1 %1.4f' % arg2_cm.get_prf('yes'))
-    # print('Arg1 Arg2 extractor combined : Precision %1.4f Recall %1.4f F1 %1.4f' % rel_arg_cm.get_prf('yes'))
-    # print('Sense classification--------------')
-    # sense_cm = evaluate_sense(gold_list, predicted_list)
-    # sense_cm.print_summary()
-    # print('Overall parser performance --------------')
-    # precision, recall, f1 = sense_cm.compute_micro_average_f1()
-    # print('Precision %1.4f Recall %1.4f F1 %1.4f' % (precision, recall, f1))
-
-    # results = np.array([
-    #     arg1_cm.get_prf('yes'),
-    #     arg2_cm.get_prf('yes'),
-    #     rel_arg_cm.get_prf('yes'),
-    #     [0, 0, 0],
-    #     connective_cm.get_prf('yes')
-    # ])
-    # return results
-
-
-def matrix_to_string(matrix, header=None):
-    """
-    Return a pretty, aligned string representation of a nxm matrix.
-    This representation can be used to print any tabular data, such as
-    database results. It works by scanning the lengths of each element
-    in each column, and determining the format string dynamically.
-    the implementation is adapted from here
-    mybravenewworld.wordpress.com/2010/09/19/print-tabular-data-nicely-using-python/
-    Args:
-        matrix - Matrix representation (list with n rows of m elements).
-        header -  Optional tuple or list with header elements to be displayed.
-    Returns:
-        nicely formatted matrix string
-    """
-
-    if isinstance(header, list):
-        header = tuple(header)
-    lengths = []
-    if header:
-        lengths = [len(column) for column in header]
-
-    # finding the max length of each column
-    for row in matrix:
-        for column in row:
-            i = row.index(column)
-            column = str(column)
-            column_length = len(column)
-            try:
-                max_length = lengths[i]
-                if column_length > max_length:
-                    lengths[i] = column_length
-            except IndexError:
-                lengths.append(column_length)
-
-    # use the lengths to derive a formatting string
-    lengths = tuple(lengths)
-    format_string = ""
-    for length in lengths:
-        format_string += "%-" + str(length) + "s "
-    format_string += "\n"
-
-    # applying formatting string to get matrix string
-    matrix_str = ""
-    if header:
-        matrix_str += format_string % header
-    for row in matrix:
-        matrix_str += format_string % tuple(row)
-
-    return matrix_str
+    print('Conn extractor:               P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[0]))
+    print('Arg1 extractor:               P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[1]))
+    print('Arg2 extractor:               P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[2]))
+    print('Concat(Arg1, Arg2) extractor: P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[3]))
+    print('Sense:                        P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[4]))
 
 
 def evaluate_argument_extractor(gold_list, predicted_list):
@@ -460,44 +354,43 @@ def connective_head_matching(gold_connective: set, predicted_connective):
         return compute_f1_span(gold_connective, predicted_connective) > 0.7
 
 
-# def evaluate_sense(gold_list, predicted_list):
-#     """Evaluate sense classifier
-#
-#     The label ConfusionMatrix.NEGATIVE_CLASS is for the relations
-#     that are missed by the system
-#     because the arguments don't match any of the gold relations.
-#     """
-#     sense_alphabet = Alphabet()
-#     for relation in gold_list:
-#         for sense in relation.senses:
-#             sense_alphabet.add(sense)
-#
-#     sense_alphabet.add(ConfusionMatrix.NEGATIVE_CLASS)
-#
-#     sense_cm = ConfusionMatrix(sense_alphabet)
-#     gold_to_predicted_map, predicted_to_gold_map = \
-#         _link_gold_predicted(gold_list, predicted_list, spans_exact_matching)
-#
-#     for i, gold_relation in enumerate(gold_list):
-#         gold_sense = gold_relation.senses
-#         if i in gold_to_predicted_map:
-#             predicted_sense = gold_to_predicted_map[i].senses
-#             if predicted_sense in gold_relation.senses:
-#                 sense_cm.add(predicted_sense, predicted_sense)
-#             else:
-#                 if not sense_cm.alphabet.has_label(predicted_sense):
-#                     predicted_sense = ConfusionMatrix.NEGATIVE_CLASS
-#                 sense_cm.add(predicted_sense, gold_sense)
-#         else:
-#             sense_cm.add(ConfusionMatrix.NEGATIVE_CLASS, gold_sense)
-#
-#     for i, predicted_relation in enumerate(predicted_list):
-#         if i not in predicted_to_gold_map:
-#             predicted_sense = predicted_relation['Sense'][0]
-#             if not sense_cm.alphabet.has_label(predicted_sense):
-#                 predicted_sense = ConfusionMatrix.NEGATIVE_CLASS
-#             sense_cm.add(predicted_sense, ConfusionMatrix.NEGATIVE_CLASS)
-#     return sense_cm
+def evaluate_sense(gold_list, predicted_list):
+    """Evaluate sense classifier
+
+    The label ConfusionMatrix.NEGATIVE_CLASS is for the relations
+    that are missed by the system
+    because the arguments don't match any of the gold relations.
+    """
+    sense_alphabet = Alphabet()
+    for relation in gold_list:
+        sense = relation.senses[0]
+        sense_alphabet.add(sense)
+
+    sense_alphabet.add(ConfusionMatrix.NEGATIVE_CLASS)
+
+    sense_cm = ConfusionMatrix(sense_alphabet)
+    gold_to_predicted_map, predicted_to_gold_map = _link_gold_predicted(gold_list, predicted_list)
+
+    for i, gold_relation in enumerate(gold_list):
+        gold_sense = gold_relation.senses[0]
+        if i in gold_to_predicted_map:
+            predicted_sense = gold_to_predicted_map[i].senses[0]
+            if predicted_sense in gold_relation.senses:
+                sense_cm.add(predicted_sense, predicted_sense)
+            else:
+                if not sense_cm.alphabet.has_label(predicted_sense):
+                    predicted_sense = ConfusionMatrix.NEGATIVE_CLASS
+                sense_cm.add(predicted_sense, gold_sense)
+        else:
+            sense_cm.add(ConfusionMatrix.NEGATIVE_CLASS, gold_sense)
+
+    for i, predicted_relation in enumerate(predicted_list):
+        if i not in predicted_to_gold_map:
+            predicted_sense = predicted_relation.senses[0]
+            if not sense_cm.alphabet.has_label(predicted_sense):
+                predicted_sense = ConfusionMatrix.NEGATIVE_CLASS
+            sense_cm.add(predicted_sense, ConfusionMatrix.NEGATIVE_CLASS)
+    return sense_cm
 
 
 def compute_binary_eval_metric(gold_list, predicted_list, matching_fn):
@@ -526,7 +419,7 @@ def compute_binary_eval_metric(gold_list, predicted_list, matching_fn):
     return cm
 
 
-def _link_gold_predicted(gold_list, predicted_list, matching_fn):
+def _link_gold_predicted(gold_list, predicted_list):
     """Link gold standard relations to the predicted relations
 
     A pair of relations are linked when the arg1 and the arg2 match exactly.
@@ -539,13 +432,12 @@ def _link_gold_predicted(gold_list, predicted_list, matching_fn):
     """
     gold_to_predicted_map = {}
     predicted_to_gold_map = {}
-    gold_arg12_list = [(x['DocID'], (x['Arg1']['TokenList'], x['Arg2']['TokenList']))
-                       for x in gold_list]
-    predicted_arg12_list = [(x['DocID'], (x['Arg1']['TokenList'], x['Arg2']['TokenList']))
-                            for x in predicted_list]
+
+    gold_arg12_list = [r.arg1 | r.arg2 for r in gold_list]
+    predicted_arg12_list = [r.arg1 | r.arg2 for r in predicted_list]
     for gi, gold_span in enumerate(gold_arg12_list):
         for pi, predicted_span in enumerate(predicted_arg12_list):
-            if matching_fn(gold_span, predicted_span):
+            if span_exact_matching(gold_span, predicted_span):
                 gold_to_predicted_map[gi] = predicted_list[pi]
                 predicted_to_gold_map[pi] = gold_list[gi]
     return gold_to_predicted_map, predicted_to_gold_map
