@@ -221,11 +221,52 @@ class Alphabet(object):
         return alphabet
 
 
+def print_results(res_mean, mode):
+    print('')
+    print('================================================')
+    print('Evaluation for {} discourse relations:'.format(mode))
+    print('================================================')
+    print('Conn extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*res_mean[0]))
+    print('Arg1 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*res_mean[1]))
+    print('Arg2 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*res_mean[2]))
+    print('Concat(Arg1, Arg2) extractor: P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*res_mean[3]))
+    print('Sense:                        P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*res_mean[4]))
+
+
 def evaluate_all(gold_relations: dict, predicted_relations: dict):
     results = []
     for doc_id in gold_relations.keys():
         gold_list = gold_relations[doc_id]
         predicted_list = predicted_relations[doc_id]
+
+        connective_cm = evaluate_connectives(gold_list, predicted_list)
+        arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list)
+        sense_cm = evaluate_sense(gold_list, predicted_list)
+
+        results.append(
+            np.array([
+                connective_cm.get_prf('yes'),
+                arg1_cm.get_prf('yes'),
+                arg2_cm.get_prf('yes'),
+                rel_arg_cm.get_prf('yes'),
+                sense_cm.compute_average_prf(),
+            ])
+        )
+        print(sense_cm.matrix)
+        print(sense_cm.alphabet._index_to_label)
+        print(sense_cm.alphabet._label_to_index)
+        break
+
+    results = np.stack(results)
+    print(results[0])
+    res_mean, res_std = results.mean(0), results.std(0)
+    print(res_mean)
+    print_results(res_mean, 'ALL')
+
+    results = []
+    for doc_id in gold_relations.keys():
+        gold_list = [r for r in gold_relations[doc_id] if r.is_explicit()]
+        predicted_list = [r for r in predicted_relations[doc_id] if r.is_explicit()]
 
         connective_cm = evaluate_connectives(gold_list, predicted_list)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list)
@@ -246,16 +287,33 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict):
 
     results = np.stack(results)
     res_mean, res_std = results.mean(0), results.std(0)
+    print_results(res_mean, 'EXPLICIT')
 
-    print('')
-    print('================================================')
-    print('Evaluation for {} discourse relations:'.format('ALL'))
-    print('================================================')
-    print('Conn extractor:               P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[0]))
-    print('Arg1 extractor:               P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[1]))
-    print('Arg2 extractor:               P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[2]))
-    print('Concat(Arg1, Arg2) extractor: P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[3]))
-    print('Sense:                        P {:6.4} R {:6.4} F1 {:6.4}'.format(*res_mean[4]))
+    results = []
+    for doc_id in gold_relations.keys():
+        gold_list = [r for r in gold_relations[doc_id] if not r.is_explicit()]
+        predicted_list = [r for r in predicted_relations[doc_id] if not r.is_explicit()]
+
+        connective_cm = evaluate_connectives(gold_list, predicted_list)
+        arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list)
+        sense_cm = evaluate_sense(gold_list, predicted_list)
+
+        if sense_cm.compute_average_prf()[1] > 1:
+            sense_cm.print_summary()
+
+        results.append(
+            np.array([
+                connective_cm.get_prf('yes'),
+                arg1_cm.get_prf('yes'),
+                arg2_cm.get_prf('yes'),
+                rel_arg_cm.get_prf('yes'),
+                sense_cm.compute_average_prf(),
+            ])
+        )
+
+    results = np.stack(results)
+    res_mean, res_std = results.mean(0), results.std(0)
+    print_results(res_mean, 'NON-EXPLICIT')
 
 
 def evaluate_argument_extractor(gold_list, predicted_list):
@@ -374,7 +432,7 @@ def evaluate_sense(gold_list, predicted_list):
     for i, gold_relation in enumerate(gold_list):
         gold_sense = gold_relation.senses[0]
         if i in gold_to_predicted_map:
-            predicted_sense = gold_to_predicted_map[i].senses[0]
+            predicted_sense = predicted_list[gold_to_predicted_map[i]].senses[0]
             if predicted_sense in gold_relation.senses:
                 sense_cm.add(predicted_sense, predicted_sense)
             else:
@@ -388,6 +446,7 @@ def evaluate_sense(gold_list, predicted_list):
         if i not in predicted_to_gold_map:
             predicted_sense = predicted_relation.senses[0]
             if not sense_cm.alphabet.has_label(predicted_sense):
+                print(predicted_sense, 'not in alphabet')
                 predicted_sense = ConfusionMatrix.NEGATIVE_CLASS
             sense_cm.add(predicted_sense, ConfusionMatrix.NEGATIVE_CLASS)
     return sense_cm
@@ -433,11 +492,9 @@ def _link_gold_predicted(gold_list, predicted_list):
     gold_to_predicted_map = {}
     predicted_to_gold_map = {}
 
-    gold_arg12_list = [r.arg1 | r.arg2 for r in gold_list]
-    predicted_arg12_list = [r.arg1 | r.arg2 for r in predicted_list]
-    for gi, gold_span in enumerate(gold_arg12_list):
-        for pi, predicted_span in enumerate(predicted_arg12_list):
-            if span_exact_matching(gold_span, predicted_span):
-                gold_to_predicted_map[gi] = predicted_list[pi]
-                predicted_to_gold_map[pi] = gold_list[gi]
+    for gi, gr in enumerate(gold_list):
+        for pi, pr in enumerate(predicted_list):
+            if span_exact_matching(gr.arg1|gr.arg2, pr.arg1|pr.arg2):
+                gold_to_predicted_map[gi] = pi
+                predicted_to_gold_map[pi] = gi
     return gold_to_predicted_map, predicted_to_gold_map
