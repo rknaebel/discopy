@@ -25,7 +25,11 @@ args = argument_parser.parse_args()
 
 
 def load_relations(path):
-    relations_json = [json.loads(s) for s in open(path, 'r').readlines()]
+    try:
+        relations_json = [json.loads(s) for s in open(path, 'r').readlines()]
+    except json.decoder.JSONDecodeError:
+        relations_json = json.load(open(path, 'r'))
+
     relations = defaultdict(list)
     for r in relations_json:
         conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
