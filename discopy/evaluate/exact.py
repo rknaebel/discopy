@@ -91,15 +91,15 @@ def evaluate_argument_extractor(gold_list, predicted_list):
     """
     gold_arg1 = [r.arg1 for r in gold_list]
     predicted_arg1 = [r.arg1 for r in predicted_list]
-    arg1_cm = compute_binary_eval_metric(gold_arg1, predicted_arg1, span_exact_matching)
+    arg1_cm = compute_binary_eval_metric(gold_arg1, predicted_arg1, span_almost_exact_matching)
 
     gold_arg2 = [r.arg2 for r in gold_list]
     predicted_arg2 = [r.arg2 for r in predicted_list]
-    arg2_cm = compute_binary_eval_metric(gold_arg2, predicted_arg2, span_exact_matching)
+    arg2_cm = compute_binary_eval_metric(gold_arg2, predicted_arg2, span_almost_exact_matching)
 
     gold_arg12 = [arg1 | arg2 for arg1, arg2 in zip(gold_arg1, gold_arg2)]
     predicted_arg12 = [arg1 | arg2 for arg1, arg2 in zip(predicted_arg1, predicted_arg2)]
-    rel_arg_cm = compute_binary_eval_metric(gold_arg12, predicted_arg12, span_exact_matching)
+    rel_arg_cm = compute_binary_eval_metric(gold_arg12, predicted_arg12, span_almost_exact_matching)
     return arg1_cm, arg2_cm, rel_arg_cm
 
 
@@ -114,23 +114,6 @@ def evaluate_connectives(gold_list, predicted_list):
     return connective_cm
 
 
-def spans_exact_matching(gold_spans, predicted_spans):
-    """Matching two lists of spans
-
-    Input:
-        gold_doc_id_spans : (DocID , a list of lists of tuples of token addresses)
-        predicted_doc_id_spans : (DocID , a list of lists of token indices)
-
-    Returns:
-        True if the spans match exactly
-    """
-    exact_match = True
-
-    for gold_span, predicted_span in zip(gold_spans, predicted_spans):
-        exact_match = span_exact_matching(gold_span, predicted_span) and exact_match
-    return exact_match
-
-
 def span_exact_matching(gold_span, predicted_span):
     """Matching two spans
 
@@ -142,6 +125,20 @@ def span_exact_matching(gold_span, predicted_span):
         True if the spans match exactly
     """
     return gold_span == predicted_span
+
+
+def span_almost_exact_matching(gold_span, predicted_span):
+    return compute_f1_span(gold_span, predicted_span) > 0.7
+
+
+def compute_f1_span(g_index_set: set, p_index_set: set) -> float:
+    """Compute F1 score for a given pair of token list"""
+    correct = float(len(g_index_set.intersection(p_index_set)))
+    if correct == 0.0:
+        return 0.0
+    precision = correct / len(p_index_set)
+    recall = correct / len(g_index_set)
+    return 2 * (precision * recall) / (precision + recall)
 
 
 # TODO changed because of different implementation of relations that stores only indices instead of words
@@ -165,16 +162,6 @@ def connective_head_matching(gold_connective: set, predicted_connective):
         connective_head_matching('just because', 'simply because')  --> False not subset
         connective_head_matching('just because', 'since')  --> False
     """
-
-    def compute_f1_span(g_index_set: set, p_index_set: set) -> float:
-        """Compute F1 score for a given pair of token list"""
-        correct = float(len(g_index_set.intersection(p_index_set)))
-        if correct == 0.0:
-            return 0.0
-        precision = correct / len(p_index_set)
-        recall = correct / len(g_index_set)
-        return 2 * (precision * recall) / (precision + recall)
-
     if gold_connective == predicted_connective:
         return True
     else:
@@ -234,7 +221,7 @@ def compute_binary_eval_metric(gold_list, predicted_list, matching_fn):
             fn += 1
 
     if tp + fp == 0:
-        precision = 0.0
+        precision = 1.0
     else:
         precision = tp / (tp + fp)
     if tp + fn == 0:
@@ -266,7 +253,7 @@ def _link_gold_predicted(gold_list, predicted_list):
 
     for gi, gr in enumerate(gold_list):
         for pi, pr in enumerate(predicted_list):
-            if span_exact_matching(gr.arg1 | gr.arg2, pr.arg1 | pr.arg2):
+            if span_almost_exact_matching(gr.arg1 | gr.arg2, pr.arg1 | pr.arg2):
                 gold_to_predicted_map[gi] = pi
                 predicted_to_gold_map[pi] = gi
     return gold_to_predicted_map, predicted_to_gold_map
