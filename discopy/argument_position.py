@@ -72,8 +72,8 @@ class ArgumentPositionClassifier:
 
     def get_argument_position(self, parse, connective: str, leaf_index):
         features = get_features(parse, connective, leaf_index)
-        arg_position = self.pos_model.classify(features)
-        return arg_position
+        arg_position = self.pos_model.prob_classify(features)
+        return arg_position.max(), arg_position.prob(arg_position.max())
 
 
 if __name__ == "__main__":

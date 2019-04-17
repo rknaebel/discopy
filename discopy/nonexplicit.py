@@ -106,7 +106,8 @@ class NonExplicitSenseClassifier:
 
     def get_sense(self, sents):
         features = get_features(sents, self.prod_rules)
-        return [self.model.classify(features)]
+        sense = self.model.prob_classify(features)
+        return sense.max(), sense.prob(sense.max())
 
 
 if __name__ == "__main__":

@@ -76,7 +76,8 @@ class ExplicitSenseClassifier:
 
     def get_sense(self, relation, ptree):
         features = get_features(relation, ptree)
-        return [self.model.classify(features)]
+        sense = self.model.prob_classify(features)
+        return sense.max(), sense.prob(sense.max())
 
 
 if __name__ == "__main__":

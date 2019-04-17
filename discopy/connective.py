@@ -168,18 +168,18 @@ class ConnectiveClassifier:
     def predict(self, X):
         pass
 
-    def get_connective(self, parsetree, sentence, word_idx) -> List[str]:
+    def get_connective(self, parsetree, sentence, word_idx) -> (List[str], float):
         # TODO prob_classify function for confidence of classifier
         candidate = match_connectives(sentence, word_idx)
         if not candidate:
-            return []
+            return [], 1.0
         else:
-            conn_label = self.model.classify(
+            conn_label = self.model.prob_classify(
                 get_features(parsetree, list(range(word_idx, word_idx + len(candidate)))))
-            if conn_label is 'N':
-                return []
+            if conn_label.max() is 'N':
+                return [], conn_label.prob('N')
             else:
-                return candidate
+                return candidate, conn_label.prob('Y')
 
 
 if __name__ == "__main__":

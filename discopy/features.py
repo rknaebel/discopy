@@ -13,7 +13,7 @@ def get_root_path(clause) -> str:
 
 def get_clause_context(clause):
     clause_pos = clause.label()
-    clause_parent_pos = clause.parent().label()
+    clause_parent_pos = clause.parent().label() if clause.parent() else 'NULL'
     if clause.left_sibling():
         clause_ls_pos = clause.left_sibling().label()
     else:
@@ -57,20 +57,22 @@ def height(clause):
 
 
 def get_clause_direction_path(conn, clause):
+    if height(conn) == height(conn.root()):
+        return conn.label()
     if height(conn) == height(clause):
         return conn.label() + 'U' + conn.parent().label() + 'D' + clause.label()
     elif height(conn) > height(clause):
         distance = height(conn) - height(clause) + 1
         p = conn.label()
         parent = conn
-        while distance != 0:
+        while distance != 0 and parent.parent():
             parent = parent.parent()
             p += 'U' + parent.label()
             distance -= 1
         distance = height(clause) - height(parent)
         parent = clause
         down = []
-        while distance != 0:
+        while distance != 0 and parent.parent():
             parent = parent.parent()
             down.append(parent.label())
             distance -= 1
@@ -88,9 +90,9 @@ def get_sibling_counts(ptree: ParentedTree):
 
 
 def get_clauses(ptree):
-    clauses = ((ptree[pos], pos) for pos in ptree.treepositions() if type(ptree[pos]) != str and len(pos) > 0)
+    clauses = ((ptree[pos], pos) for pos in ptree.treepositions() if type(ptree[pos]) != str)
     clauses = [(subtree, pos) for subtree, pos in clauses if
-               subtree.height() > 2 and subtree.label() in ['VP', 'S', 'SBAR']]
+               subtree.height() > 1 and subtree.label() in ['VP', 'S', 'SBAR']]
     return clauses
 
 

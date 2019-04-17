@@ -156,6 +156,7 @@ class ArgumentExtractClassifier:
         indices = [token[4] for token in relation['Connective']['TokenList']]
         chm = ConnHeadMapper()
         conn_head, _ = chm.map_raw_connective(relation['Connective']['RawText'])
+        ptree._label = 'S'
         clauses = get_clauses(ptree)
 
         features = [i[0] for i in get_features(clauses, conn_head, indices, ptree)]
@@ -178,7 +179,7 @@ class ArgumentExtractClassifier:
         arg2 = set(ptree_ids[clauses[arg2_probs.argmax()][1]].leaves())
         arg1 = arg1 - arg2
 
-        return list(arg1), list(arg2)
+        return list(arg1), list(arg2), arg1_probs.max(), arg2_probs.max()
 
 
 if __name__ == "__main__":
