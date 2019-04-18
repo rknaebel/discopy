@@ -61,6 +61,7 @@ class DiscourseParser(object):
         token_id = 0
         sent_offset = 0
         inter_relations = set()
+        doc_words = [w[0] for s in doc['sentences'] for w in s['words']]
         for i, sent in enumerate(doc['sentences']):
             sent_len = len(sent['words'])
             try:
@@ -116,6 +117,8 @@ class DiscourseParser(object):
                     len_prev = len(sent_prev['words'])
                     relation['Arg1']['TokenList'] = list(range((token_id - len_prev), token_id - 1))
                     relation['Arg2']['TokenList'] = [i + token_id - j for i in arg2]
+                    relation['Arg1']['RawText'] = [doc_words[i] for i in relation['Arg1']['TokenList']]
+                    relation['Arg2']['RawText'] = [doc_words[i] for i in relation['Arg2']['TokenList']]
                     relation['Confidences']['Arg1'] = 1.0
                     relation['Confidences']['Arg2'] = arg2_c
                     inter_relations.add(i)
@@ -123,6 +126,8 @@ class DiscourseParser(object):
                     arg1, arg2, arg1_c, arg2_c = self.arg_extract_clf.extract_arguments(sent_parse, relation)
                     relation['Arg1']['TokenList'] = [i + token_id - j for i in arg1]
                     relation['Arg2']['TokenList'] = [i + token_id - j for i in arg2]
+                    relation['Arg1']['RawText'] = [doc_words[i] for i in relation['Arg1']['TokenList']]
+                    relation['Arg2']['RawText'] = [doc_words[i] for i in relation['Arg2']['TokenList']]
                     relation['Confidences']['Arg1'] = arg1_c
                     relation['Confidences']['Arg2'] = arg2_c
 
@@ -164,6 +169,8 @@ class DiscourseParser(object):
                     'Sense': sense_c
                 }
             }
+            relation['Arg1']['RawText'] = [doc_words[i] for i in relation['Arg1']['TokenList']]
+            relation['Arg2']['RawText'] = [doc_words[i] for i in relation['Arg2']['TokenList']]
             output.append(relation)
 
             token_id += len(sent['words'])
