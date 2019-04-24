@@ -121,7 +121,10 @@ def generate_pdtb_features(pdtb, parses):
     pdtb = group_by_doc_id(pdtb)
     for doc_id, doc in parses.items():
         for sentence in doc['sentences']:
-            parsetree = nltk.ParentedTree.fromstring(sentence['parsetree'])
+            try:
+                parsetree = nltk.ParentedTree.fromstring(sentence['parsetree'])
+            except ValueError:
+                continue
             if not parsetree.leaves():
                 continue
             doc_relations = pdtb[doc_id]
@@ -139,8 +142,8 @@ def generate_pdtb_features(pdtb, parses):
                     # check all relations in pdtb for this document
                     for relation in doc_relations:
                         connective, _ = chm.map_raw_connective(relation['Connective']['RawText'])
-                        cOBConnective = relation['Connective']['CharacterSpanList'][0][0]
-                        cOEConnective = relation['Connective']['CharacterSpanList'][-1][1]
+                        cOBConnective = relation['Connective']['TokenList'][0][0]
+                        cOEConnective = relation['Connective']['TokenList'][-1][1]
                         if cOBConnective <= cOBWord and cOEWord <= cOEConnective:
                             l = [string.lower() for string in connective.split()]
                             if (word in l):

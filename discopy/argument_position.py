@@ -36,8 +36,10 @@ def generate_pdtb_features(pdtb, parses):
         connective_raw = relation['Connective']['RawText']
         leaf_indices = [token[4] for token in connective]
         ptree = parses[doc]['sentences'][connective[0][3]]['parsetree']
-        ptree = nltk.ParentedTree.fromstring(ptree)
-
+        try:
+            ptree = nltk.ParentedTree.fromstring(ptree)
+        except ValueError:
+            continue
         if not ptree.leaves():
             continue
 
