@@ -47,7 +47,10 @@ def generate_pdtb_features(pdtb, parses):
         sentenceOffSet = relation['Connective']['TokenList'][0][3]
         doc = relation['DocID']
         sense = relation['Sense'][0]
-        ptree = nltk.ParentedTree.fromstring(parses[doc]['sentences'][sentenceOffSet]['parsetree'])
+        try:
+            ptree = nltk.ParentedTree.fromstring(parses[doc]['sentences'][sentenceOffSet]['parsetree'])
+        except ValueError:
+            continue
         if not ptree.leaves():
             continue
         features.append((get_features(relation, ptree), sense))

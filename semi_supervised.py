@@ -32,8 +32,11 @@ def convert_to_conll(document):
             continue
         p['sentences'].append({
             'words': [(word, {
+                'CharacterOffsetBegin': offset,
+                'CharacterOffsetEnd': offset + len(word),
+                'Linkers': [],
                 'PartOfSpeech': pos,
-            }) for word, pos in zip(sentence['Tokens'], sentence['POS'])],
+            }) for word, offset, pos in zip(sentence['Tokens'], sentence['Offset'], sentence['POS'])],
             'parsetree': sentence['Parse'],
             'dependencies': [(dep, "{}-{}".format(*node1), "{}-{}".format(*node2)) for (dep, node1, node2) in
                              sentence['Dep']]
@@ -52,19 +55,17 @@ def main():
     elif args.mode == 'run':
         parser.load(args.dir)
 
-        documents = json.load(open(args.parses, 'r'))
-
         relations = []
-        with open(args.out, 'w') as fh:
-
-            for idx, doc in enumerate(tqdm(documents)):
+        with open(args.parses, 'r') as fh_in, open(args.out, 'w') as fh_out:
+            for idx, doc_line in enumerate(tqdm(fh_in)):
+                doc = json.loads(doc_line)
                 parsed_relations = parser.parse_doc(convert_to_conll(doc))
                 for p in parsed_relations:
                     p['DocID'] = doc['DocID']
                 relations.extend(parsed_relations)
 
                 for relation in parsed_relations:
-                    fh.write('{}\n'.format(json.dumps(relation)))
+                    fh_out.write('{}\n'.format(json.dumps(relation)))
 
                 if idx > 10:
                     break

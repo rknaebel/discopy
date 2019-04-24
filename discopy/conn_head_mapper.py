@@ -7,7 +7,7 @@ class ConnHeadMapper(object):
         head_connective = self.mapping.get(raw_connective, raw_connective)
         # find the index of the head connectives
         raw_connective_token_list = raw_connective.lower().split(' ')
-        head_connective_token_list = head_connective.split(' ')
+        head_connective_token_list = head_connective.lower().split(' ')
         start_point = 0
         indices = []
         for head_connective_token in head_connective_token_list:
@@ -18,7 +18,7 @@ class ConnHeadMapper(object):
                     indices.append(i)
                     start_point = i + 1
                     break
-        assert (len(head_connective_token_list) == len(indices))
+        assert (len(head_connective_token_list) == len(indices)), (raw_connective_token_list, head_connective_token_list, indices)
         return head_connective, indices
 
     DEFAULT_MAPPING = {
