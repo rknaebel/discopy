@@ -15,7 +15,7 @@ argument_parser.add_argument("--pdtb", help="",
 argument_parser.add_argument("--parses", help="",
                              default='results')
 argument_parser.add_argument("--epochs", help="",
-                             default=10)
+                             default=10, type=int)
 argument_parser.add_argument("--out", help="",
                              default='output.json')
 args = argument_parser.parse_args()
@@ -25,7 +25,9 @@ def main():
     parser = DiscourseParser()
 
     if args.mode == 'train':
-        parser.train(args.pdtb, args.parses, epochs=args.epochs)
+        pdtb = [json.loads(s) for s in open(args.pdtb, 'r').readlines()]
+        parses = json.loads(open(args.parses).read())
+        parser.train(pdtb, parses, epochs=args.epochs)
         if not os.path.exists(args.dir):
             os.mkdir(args.dir)
         parser.save(args.dir)
@@ -33,9 +35,7 @@ def main():
         parser.load(args.dir)
         relations = parser.parse_file(args.parses)
         with open(args.out, 'w') as fh:
-            fh.write('[\n')
-            fh.writelines(',\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
-            fh.write('\n]\n')
+            fh.writelines('\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
 
 
 if __name__ == '__main__':

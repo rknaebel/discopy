@@ -19,20 +19,17 @@ class DiscourseParser(object):
         self.explicit_clf = ExplicitSenseClassifier()
         self.non_explicit_clf = NonExplicitSenseClassifier()
 
-    def train(self, pdtb_dir, parses_dir, epochs=10):
-        print('Load PDTB and WSJ')
-        pdtb_train = [json.loads(s) for s in open(pdtb_dir, 'r').readlines()]
-        parses_train = json.loads(open(parses_dir).read())
+    def train(self, pdtb, parses, epochs=10):
         print('Train Connective Classifier...')
-        self.connective_clf.fit(pdtb_train, parses_train, max_iter=epochs)
+        self.connective_clf.fit(pdtb, parses, max_iter=epochs)
         print('Train ArgPosition Classifier...')
-        self.arg_pos_clf.fit(pdtb_train, parses_train, max_iter=epochs)
+        self.arg_pos_clf.fit(pdtb, parses, max_iter=epochs)
         print('Train Argument Extractor...')
-        self.arg_extract_clf.fit(pdtb_train, parses_train, max_iter=epochs)
+        self.arg_extract_clf.fit(pdtb, parses, max_iter=epochs)
         print('Train Explicit Sense Classifier...')
-        self.explicit_clf.fit(pdtb_train, parses_train, max_iter=epochs)
+        self.explicit_clf.fit(pdtb, parses, max_iter=epochs)
         print('Train Non-Explicit Sense Classifier...')
-        self.non_explicit_clf.fit(pdtb_train, parses_train, max_iter=epochs)
+        self.non_explicit_clf.fit(pdtb, parses, max_iter=epochs)
 
     def save(self, path):
         self.connective_clf.save(path)
