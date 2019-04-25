@@ -25,11 +25,7 @@ args = argument_parser.parse_args()
 
 
 def load_relations(path):
-    try:
-        relations_json = [json.loads(s) for s in open(path, 'r').readlines()]
-    except json.decoder.JSONDecodeError:
-        relations_json = json.load(open(path, 'r'))
-
+    relations_json = [json.loads(s) for s in open(path, 'r').readlines()]
     relations = defaultdict(list)
     for r in relations_json:
         conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
@@ -56,8 +52,8 @@ def main():
         with open(args.out, 'w') as fh:
             fh.writelines('\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
     elif args.mode == 'eval':
-        gold_relations = load_relations('../discourse/data/conll2016/en.dev/relations.json')
-        pred_relations = load_relations('output.json')
+        gold_relations = load_relations(args.pdtb)
+        pred_relations = load_relations(args.out)
         discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations)
     else:
         raise ValueError('Unknown mode')
