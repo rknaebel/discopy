@@ -11,17 +11,34 @@ def get_production_rules(ptree):
 
 
 def extract_productions(ptrees):
-    prod_rules = {production for ptree in ptrees for production in get_production_rules(ptree)}
-    return prod_rules
+    return [production for ptree in ptrees for production in get_production_rules(ptree)]
 
 
 def get_features(parse_trees, all_productions):
-    productions = extract_productions(parse_trees)
+    productions = set(extract_productions(parse_trees))
 
     feat = {}
     for p in all_productions:
         feat[p] = str(p in productions)
     return feat
+
+
+def generate_production_rules(pdtb, parses, min_occurrence=5):
+    extracted_productions = []
+    for relation in filter(lambda i: i['Type'] != 'Explicit', pdtb):
+        sentence_ids = {t[3] for a in ['Arg1', 'Arg2'] for t in relation[a]['TokenList']}
+        doc = relation['DocID']
+        try:
+            parse_trees = [nltk.ParentedTree.fromstring(parses[doc]['sentences'][sentence_id]['parsetree']) for
+                           sentence_id
+                           in sentence_ids]
+        except ValueError:
+            continue
+        extracted_productions.extend(extract_productions(parse_trees))
+
+    prod_counter = Counter(extracted_productions)
+    all_productions = list(p for p, c in prod_counter.items() if c > min_occurrence)
+    return all_productions
 
 
 # {'AltLex': {'Comparison.Concession',
@@ -57,8 +74,8 @@ def get_features(parse_trees, all_productions):
 #               'Temporal.Asynchronous.Precedence',
 #               'Temporal.Asynchronous.Succession',
 #               'Temporal.Synchrony'}}
-def generate_pdtb_features(pdtb, parses):
-    extracted_productions = []
+def generate_pdtb_features(pdtb, parses, production_rules):
+    feature_set = []
     for relation in filter(lambda i: i['Type'] != 'Explicit', pdtb):
         sentence_ids = {t[3] for a in ['Arg1', 'Arg2'] for t in relation[a]['TokenList']}
         doc = relation['DocID']
@@ -69,25 +86,15 @@ def generate_pdtb_features(pdtb, parses):
         except ValueError:
             continue
         sense = relation['Sense'][0]
-        extracted_productions.append((extract_productions(parse_trees), sense))
+        feature_set.append((get_features(parse_trees, production_rules), sense))
 
-    prod_counter = Counter(p for feature in extracted_productions for p in feature[0])
-    all_productions = list(p for p, c in prod_counter.items() if c > 5)[:100]
-
-    feature_set = []
-    for (productions, sense) in extracted_productions:
-        feat = {}
-        for p in all_productions:
-            feat[p] = str(p in productions)
-        feature_set.append((feat, sense))
-
-    return all_productions, feature_set
+    return feature_set
 
 
 class NonExplicitSenseClassifier:
     def __init__(self):
         self.model = None
-        self.prod_rules = set()
+        self.prod_rules = []
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'non_explicit_clf.p'), 'rb'))
@@ -98,7 +105,11 @@ class NonExplicitSenseClassifier:
         pickle.dump(self.prod_rules, open(os.path.join(path, 'non_explicit_prod_rules.p'), 'wb'))
 
     def fit(self, pdtb, parses, max_iter=5):
-        self.prod_rules, features = generate_pdtb_features(pdtb, parses)
+        prod_rules = generate_production_rules(pdtb, parses)
+        features = generate_pdtb_features(pdtb, parses, prod_rules)
+        clf = nltk.NaiveBayesClassifier.train(features)
+        self.prod_rules = [p for p, l in clf.most_informative_features(100)]
+        features = generate_pdtb_features(pdtb, parses, self.prod_rules)
         self.fit_on_features(features, max_iter=max_iter)
 
     def fit_on_features(self, features, max_iter=5):

@@ -104,12 +104,14 @@ def generate_pdtb_features(pdtb, parses):
 
     for relation in filter(lambda i: i['Type'] == 'Explicit', pdtb):
         doc_id = relation['DocID']
-        arg1_sentence_id = relation['Arg1']['TokenList'][0][3]
-        arg2_sentence_id = relation['Arg2']['TokenList'][0][3]
-        s = parses[doc_id]['sentences'][arg2_sentence_id]['parsetree']
         try:
+            arg1_sentence_id = relation['Arg1']['TokenList'][0][3]
+            arg2_sentence_id = relation['Arg2']['TokenList'][0][3]
+            s = parses[doc_id]['sentences'][arg2_sentence_id]['parsetree']
             ptree = nltk.ParentedTree.fromstring(s)
         except ValueError:
+            continue
+        except IndexError:
             continue
 
         if not ptree.leaves():

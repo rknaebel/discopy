@@ -1,5 +1,6 @@
 import codecs
 import json
+import os
 
 import nltk
 
@@ -42,6 +43,8 @@ class DiscourseParser(object):
         self.non_explicit_clf.fit(pdtb, parses, max_iter=epochs)
 
     def save(self, path):
+        if not os.path.exists(path):
+            os.mkdir(path)
         self.connective_clf.save(path)
         self.arg_pos_clf.save(path)
         self.arg_extract_clf.save(path)
@@ -94,7 +97,7 @@ class DiscourseParser(object):
                 }
 
                 # CONNECTIVE CLASSIFIER
-                connective, connective_confidence = self.connective_clf.get_connective(sent_parse, sent['words'], j)
+                connective, connective_confidence = self.connective_clf.get_connective(sent_parse, sent['words'], current_token)
                 # whenever a position is not identified as connective, go to the next token
                 if not connective:
                     token_id += 1

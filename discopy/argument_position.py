@@ -45,6 +45,8 @@ def generate_pdtb_features(pdtb, parses):
 
         arg1 = sorted({i[3] for i in relation['Arg1']['TokenList']})
         arg2 = sorted({i[3] for i in relation['Arg2']['TokenList']})
+        if not arg1 or not arg2:
+            continue
         if arg1[-1] < arg2[0]:
             features.append((get_features(ptree, connective_raw, leaf_indices), 'PS'))
         elif len(arg1) == 1 and len(arg2) == 1 and arg1[0] == arg2[0]:

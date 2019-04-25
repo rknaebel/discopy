@@ -125,7 +125,7 @@ def generate_pdtb_features(pdtb, parses):
                 parsetree = nltk.ParentedTree.fromstring(sentence['parsetree'])
             except ValueError:
                 continue
-            if not parsetree.leaves():
+            if not parsetree.leaves() or doc_id not in pdtb:
                 continue
             doc_relations = pdtb[doc_id]
             words = sentence['words']  # a word is a complex object containing information about offset etc
@@ -150,8 +150,12 @@ def generate_pdtb_features(pdtb, parses):
                                 featureSets.append((get_features(parsetree, tokenNo), 'Y'))
                                 break
                     else:
-                        # use connective candidate as negative example if there is no relation marked in PDTB
-                        featureSets.append((get_features(parsetree, tokenNo), 'N'))
+                        try:
+                            # use connective candidate as negative example if there is no relation marked in PDTB
+                            featureSets.append((get_features(parsetree, tokenNo), 'N'))
+                        # TODO remove later after fixing data pre-processing
+                        except IndexError:
+                            print(doc_id, connective_candidate, skip, tokenNo, word_idx)
     return featureSets
 
 
