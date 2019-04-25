@@ -29,11 +29,16 @@ For training all components two epochs each:
 python3 main.py --mode train --dir tmp --pdtb path/train/relations.json --parses path/train/parses.json --epochs 2
 ```
 
-
 ### Execution
 ```
 python3 main.py --mode run --dir tmp --parses path/dev/parses.json --out output.json
 ```
+
+### Evaluation
+```
+python3 main.py --mode eval --pdtb path/dev/relations.json --out output.json
+```
+
 
 ## Components
 
