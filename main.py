@@ -2,7 +2,10 @@ import json
 import os
 
 import argparse
+from collections import defaultdict
 
+import discopy.evaluate.exact
+from discopy.utils import Relation
 from discopy.parser import DiscourseParser
 
 argument_parser = argparse.ArgumentParser()
@@ -21,6 +24,18 @@ argument_parser.add_argument("--out", help="",
 args = argument_parser.parse_args()
 
 
+def load_relations(path):
+    relations_json = [json.loads(s) for s in open(path, 'r').readlines()]
+    relations = defaultdict(list)
+    for r in relations_json:
+        conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
+        arg1 = [(i[2] if type(i) == list else i) for i in r['Arg1']['TokenList']]
+        arg2 = [(i[2] if type(i) == list else i) for i in r['Arg2']['TokenList']]
+        senses = r['Sense']
+        relations[r['DocID']].append(Relation(arg1, arg2, conn, senses))
+    return relations
+
+
 def main():
     parser = DiscourseParser()
 
@@ -36,6 +51,12 @@ def main():
         relations = parser.parse_file(args.parses)
         with open(args.out, 'w') as fh:
             fh.writelines('\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
+    elif args.mode == 'eval':
+        gold_relations = load_relations(args.pdtb)
+        pred_relations = load_relations(args.out)
+        discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations)
+    else:
+        raise ValueError('Unknown mode')
 
 
 if __name__ == '__main__':

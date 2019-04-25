@@ -84,3 +84,60 @@ distant_connectives = list(map(lambda s: s.split(' '), [
 
 multi_connectives_first = {'as', 'before', 'by', 'for', 'either', 'if', 'in', 'insofar', 'much', 'neither',
                            'now', 'on', 'so', 'when'}
+
+
+def jaccard_index(a, b):
+    if len(a) == 0 and len(b) == 0:
+        return 1
+    else:
+        return len(a & b) / len(a | b)
+
+
+def jaccard_distance(a, b):
+    return 1 - jaccard_index(a, b)
+
+
+class Relation:
+    def __init__(self, arg1=None, arg2=None, conn=None, senses=None):
+        self.arg1 = set(arg1) if arg1 else set()
+        self.arg2 = set(arg2) if arg2 else set()
+        self.conn = set(conn) if conn else set()
+        self.senses = senses or []
+
+    def __eq__(self, other):
+        return (self.arg1 == other.arg1) and (self.arg2 == other.arg2) and (self.conn == other.conn)
+
+    def __and__(self, other):
+        r = Relation()
+        r.arg1 = self.arg1 & other.arg1
+        r.arg2 = self.arg2 & other.arg2
+        r.conn = self.conn & other.conn
+        return r
+
+    def __or__(self, other):
+        r = Relation()
+        r.conn = self.conn | other.conn
+        r.arg2 = (self.arg2 | other.arg2) - r.conn
+        r.arg1 = (self.arg1 | other.arg1) - (r.conn | r.arg2)
+        return r
+
+    def __bool__(self):
+        return bool(self.arg1) and bool(self.arg2)
+
+    def __str__(self):
+        return "Rel(arg1: <{}>, arg2: <{}>, conn: <{}>)".format(
+            ",".join(map(str, sorted(self.arg1))),
+            ",".join(map(str, sorted(self.arg2))),
+            ",".join(map(str, sorted(self.conn)))
+        )
+
+    def is_explicit(self):
+        return bool(self.conn)
+
+    def __repr__(self):
+        return "({},{},{})".format(list(self.arg1), list(self.arg2), list(self.conn))
+
+    def distance(self, other):
+        d_arg1 = jaccard_distance(self.arg1, other.arg1)
+        d_arg2 = jaccard_distance(self.arg2 | self.conn, other.arg2 | other.conn)
+        return (d_arg1 + d_arg2) / 2
