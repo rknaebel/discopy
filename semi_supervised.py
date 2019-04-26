@@ -1,10 +1,10 @@
-import argparse
-import os
-
 import ujson as json
+
+import argparse
 from tqdm import tqdm
 
 from discopy.parser import DiscourseParser
+from utils import convert_to_conll
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--mode", help="",
@@ -22,35 +22,13 @@ argument_parser.add_argument("--out", help="",
 args = argument_parser.parse_args()
 
 
-def convert_to_conll(document):
-    p = {
-        'DocID': document['DocID'],
-        'sentences': []
-    }
-    for sentence in document['sentences']:
-        if not sentence:
-            continue
-        p['sentences'].append({
-            'words': [(word, {
-                'CharacterOffsetBegin': offset,
-                'CharacterOffsetEnd': offset + len(word),
-                'Linkers': [],
-                'PartOfSpeech': pos,
-            }) for word, offset, pos in zip(sentence['Tokens'], sentence['Offset'], sentence['POS'])],
-            'parsetree': sentence['Parse'],
-            'dependencies': [(dep, "{}-{}".format(*node1), "{}-{}".format(*node2)) for (dep, node1, node2) in
-                             sentence['Dep']]
-        })
-    return p
-
-
 def main():
     parser = DiscourseParser()
 
     if args.mode == 'train':
-        parser.train(args.pdtb, args.parses, epochs=args.epochs)
-        if not os.path.exists(args.dir):
-            os.mkdir(args.dir)
+        pdtb = [json.loads(s) for s in open(args.pdtb, 'r').readlines()]
+        parses = json.loads(open(args.parses).read())
+        parser.train(pdtb, parses, epochs=args.epochs)
         parser.save(args.dir)
     elif args.mode == 'run':
         parser.load(args.dir)

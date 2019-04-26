@@ -141,3 +141,25 @@ class Relation:
         d_arg1 = jaccard_distance(self.arg1, other.arg1)
         d_arg2 = jaccard_distance(self.arg2 | self.conn, other.arg2 | other.conn)
         return (d_arg1 + d_arg2) / 2
+
+
+def convert_to_conll(document):
+    p = {
+        'DocID': document['DocID'],
+        'sentences': []
+    }
+    for sentence in document['sentences']:
+        if not sentence:
+            continue
+        p['sentences'].append({
+            'words': [(word, {
+                'CharacterOffsetBegin': sentence['SentenceOffset'] + offset,
+                'CharacterOffsetEnd': sentence['SentenceOffset'] + offset + len(word),
+                'Linkers': [],
+                'PartOfSpeech': pos,
+            }) for word, offset, pos in zip(sentence['Tokens'], sentence['Offset'], sentence['POS'])],
+            'parsetree': sentence['Parse'],
+            'dependencies': [(dep, "{}-{}".format(*node1), "{}-{}".format(*node2)) for (dep, node1, node2) in
+                             sentence['Dep']]
+        })
+    return p
