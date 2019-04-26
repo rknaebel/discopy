@@ -53,12 +53,16 @@ def get_features(ptree, leaf_index):
     leftSibling = ptree[lca_loc].left_sibling()
     if leftSibling:
         leftSibling = leftSibling.label()
+    else:
+        leftSibling = 'NONE'
 
     rightSibling = ptree[lca_loc].right_sibling()
     rightVP = 'VP' in labels
     rightTR = 'T' in labels
     if rightSibling:
         rightSibling = rightSibling.label()
+    else:
+        rightSibling = 'NONE'
 
     prev = leaf_index[0] - 1
     next = leaf_index[len(leaf_index) - 1] + 1

@@ -1,12 +1,11 @@
 import json
-import os
-
-import argparse
 from collections import defaultdict
 
+import argparse
+
 import discopy.evaluate.exact
-from discopy.utils import Relation
 from discopy.parser import DiscourseParser
+from discopy.utils import Relation
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--mode", help="",
@@ -24,8 +23,7 @@ argument_parser.add_argument("--out", help="",
 args = argument_parser.parse_args()
 
 
-def load_relations(path):
-    relations_json = [json.loads(s) for s in open(path, 'r').readlines()]
+def load_relations(relations_json):
     relations = defaultdict(list)
     for r in relations_json:
         conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
@@ -43,8 +41,6 @@ def main():
         pdtb = [json.loads(s) for s in open(args.pdtb, 'r').readlines()]
         parses = json.loads(open(args.parses).read())
         parser.train(pdtb, parses, epochs=args.epochs)
-        if not os.path.exists(args.dir):
-            os.mkdir(args.dir)
         parser.save(args.dir)
     elif args.mode == 'run':
         parser.load(args.dir)
@@ -52,8 +48,8 @@ def main():
         with open(args.out, 'w') as fh:
             fh.writelines('\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
     elif args.mode == 'eval':
-        gold_relations = load_relations(args.pdtb)
-        pred_relations = load_relations(args.out)
+        gold_relations = load_relations([json.loads(s) for s in open(args.pdtb, 'r').readlines()])
+        pred_relations = load_relations([json.loads(s) for s in open(args.out, 'r').readlines()])
         discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations)
     else:
         raise ValueError('Unknown mode')
