@@ -1,11 +1,10 @@
 import json
-from collections import defaultdict
 
 import argparse
 
 import discopy.evaluate.exact
 from discopy.parser import DiscourseParser
-from discopy.utils import Relation
+from discopy.utils import load_relations
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--mode", help="",
@@ -21,17 +20,6 @@ argument_parser.add_argument("--epochs", help="",
 argument_parser.add_argument("--out", help="",
                              default='output.json')
 args = argument_parser.parse_args()
-
-
-def load_relations(relations_json):
-    relations = defaultdict(list)
-    for r in relations_json:
-        conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
-        arg1 = [(i[2] if type(i) == list else i) for i in r['Arg1']['TokenList']]
-        arg2 = [(i[2] if type(i) == list else i) for i in r['Arg2']['TokenList']]
-        senses = r['Sense']
-        relations[r['DocID']].append(Relation(arg1, arg2, conn, senses))
-    return relations
 
 
 def main():

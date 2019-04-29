@@ -1,6 +1,8 @@
 #
 # argument extractor
 #
+from collections import defaultdict
+
 discourse_adverbial = {'accordingly', 'additionally', 'afterwards', 'also', 'alternatively', 'as a result',
                        'as an alternative', 'as well', 'besides', 'by comparison', 'by contrast',
                        'by then', 'consequently', 'conversely', 'earlier', 'either..or', 'except', 'finally',
@@ -163,3 +165,14 @@ def convert_to_conll(document):
                              sentence['Dep']]
         })
     return p
+
+
+def load_relations(relations_json):
+    relations = defaultdict(list)
+    for r in relations_json:
+        conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
+        arg1 = [(i[2] if type(i) == list else i) for i in r['Arg1']['TokenList']]
+        arg2 = [(i[2] if type(i) == list else i) for i in r['Arg2']['TokenList']]
+        senses = r['Sense']
+        relations[r['DocID']].append(Relation(arg1, arg2, conn, senses))
+    return dict(relations)
