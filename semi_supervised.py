@@ -1,7 +1,6 @@
-import argparse
-import os
-
 import ujson as json
+
+import argparse
 from tqdm import tqdm
 
 from discopy.parser import DiscourseParser
