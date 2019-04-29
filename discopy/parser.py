@@ -3,6 +3,7 @@ import json
 import os
 
 import nltk
+import numpy as np
 
 from discopy.argument_extract import ArgumentExtractClassifier
 from discopy.argument_position import ArgumentPositionClassifier
@@ -162,8 +163,12 @@ class DiscourseParser(object):
                 token_id += len(sent['words'])
                 continue
 
-            sent_parse = nltk.ParentedTree.fromstring(sent['parsetree'])
-            sent_prev_parse = nltk.ParentedTree.fromstring(doc['sentences'][sent_id - 1]['parsetree'])
+            try:
+                sent_parse = nltk.ParentedTree.fromstring(sent['parsetree'])
+                sent_prev_parse = nltk.ParentedTree.fromstring(doc['sentences'][sent_id - 1]['parsetree'])
+            except ValueError:
+                print('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
+                continue
 
             if not sent_parse.leaves() or not sent_prev_parse.leaves():
                 continue
@@ -192,4 +197,7 @@ class DiscourseParser(object):
             output.append(relation)
 
             token_id += len(sent['words'])
+
+        for r in output:
+            r['Confidence'] = np.mean(list(r['Confidences'].values()))
         return output
