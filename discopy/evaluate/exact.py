@@ -177,7 +177,7 @@ def compute_prf(tp, fp, fn):
     if precision + recall > 0:
         f1 = (2 * precision * recall) / (precision + recall)
     else:
-        f1 = 0
+        f1 = 0.0
 
     return precision, recall, f1
 
