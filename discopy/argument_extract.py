@@ -182,9 +182,12 @@ class ArgumentExtractClassifier:
 
         arg1 = set(ptree_ids[clauses[arg1_probs.argmax()][1]].leaves())
         arg2 = set(ptree_ids[clauses[arg2_probs.argmax()][1]].leaves())
-        arg1 = arg1 - arg2
+        if arg1.issubset(arg2):
+            arg2 = arg2 - arg1
+        elif arg1.issuperset(arg2):
+            arg1 = arg1 - arg2
 
-        return list(arg1), list(arg2), arg1_probs.max(), arg2_probs.max()
+        return sorted(arg1), sorted(arg2), arg1_probs.max(), arg2_probs.max()
 
 
 if __name__ == "__main__":
