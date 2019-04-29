@@ -109,11 +109,11 @@ def span_almost_exact_matching(gold_span, predicted_span):
 
 
 def compute_span_f1(g_index_set: set, p_index_set: set) -> float:
-    correct = float(len(g_index_set.intersection(p_index_set)))
-    if correct == 0.0:
+    correct = len(g_index_set.intersection(p_index_set))
+    if correct == 0:
         return 0.0
-    precision = correct / len(p_index_set)
-    recall = correct / len(g_index_set)
+    precision = float(correct) / len(p_index_set)
+    recall = float(correct) / len(g_index_set)
     return 2 * (precision * recall) / (precision + recall)
 
 

@@ -12,9 +12,9 @@ from discopy.nonexplicit import NonExplicitSenseClassifier
 
 
 def get_token_list(doc_words, tokens, sent_id, sent_off):
-    return [(doc_words[t][1]['CharacterOffsetBegin'],
-             doc_words[t][1]['CharacterOffsetEnd'],
-             t, sent_id, t-sent_off) for t in tokens]
+    return [[doc_words[sent_off + t][1]['CharacterOffsetBegin'],
+             doc_words[sent_off + t][1]['CharacterOffsetEnd'],
+             sent_off + t, sent_id, t] for t in tokens]
 
 
 def get_raw_tokens(doc_words, idxs):
@@ -84,6 +84,7 @@ class DiscourseParser(object):
                 token_id += sent_len
                 continue
             if not sent_parse.leaves():
+                print('Failed on empty tree')
                 token_id += sent_len
                 continue
             current_token = 0
@@ -104,12 +105,14 @@ class DiscourseParser(object):
                     current_token += 1
                     continue
 
-                relation['Connective']['TokenList'] = get_token_list(doc_words, [t_sent + token_id for t_sent in range(len(connective))], sent_id, sent_offset)
+                relation['Connective']['TokenList'] = get_token_list(doc_words, [current_token + t_sent for t_sent in
+                                                                                 range(len(connective))], sent_id,
+                                                                     sent_offset)
                 relation['Connective']['RawText'] = get_raw_tokens(doc_words, relation['Connective']['TokenList'])
                 relation['Confidences']['Connective'] = connective_confidence
 
                 # ARGUMENT POSITION
-                leaf_index = list(range(current_token, current_token + len(connective)))
+                leaf_index = [i[4] for i in relation['Connective']['TokenList']]
                 arg_pos, arg_pos_confidence = self.arg_pos_clf.get_argument_position(sent_parse, ' '.join(connective),
                                                                                      leaf_index)
                 relation['ArgPos'] = arg_pos
@@ -126,16 +129,17 @@ class DiscourseParser(object):
                     sent_prev = doc['sentences'][sent_id - 1]
                     _, arg2, arg1_c, arg2_c = self.arg_extract_clf.extract_arguments(sent_parse, relation)
                     len_prev = len(sent_prev['words'])
-                    relation['Arg1']['TokenList'] = get_token_list(doc_words, list(range((token_id - len_prev), token_id - 1)), sent_id-1, sent_offset-len_prev)
-                    relation['Arg2']['TokenList'] = get_token_list(doc_words, [i + token_id - current_token for i in arg2], sent_id, sent_offset)
+                    relation['Arg1']['TokenList'] = get_token_list(doc_words, list(range(len_prev)), sent_id - 1,
+                                                                   sent_offset - len_prev)
+                    relation['Arg2']['TokenList'] = get_token_list(doc_words, arg2, sent_id, sent_offset)
                     relation['Arg1']['RawText'] = get_raw_tokens(doc_words, relation['Arg1']['TokenList'])
                     relation['Arg2']['RawText'] = get_raw_tokens(doc_words, relation['Arg2']['TokenList'])
                     relation['Confidences']['Arg2'] = arg2_c
                     inter_relations.add(sent_id)
                 elif arg_pos == 'SS':
                     arg1, arg2, arg1_c, arg2_c = self.arg_extract_clf.extract_arguments(sent_parse, relation)
-                    relation['Arg1']['TokenList'] = get_token_list(doc_words, [i + token_id - current_token for i in arg1], sent_id, sent_offset)
-                    relation['Arg2']['TokenList'] = get_token_list(doc_words, [i + token_id - current_token for i in arg2], sent_id, sent_offset)
+                    relation['Arg1']['TokenList'] = get_token_list(doc_words, arg1, sent_id, sent_offset)
+                    relation['Arg2']['TokenList'] = get_token_list(doc_words, arg2, sent_id, sent_offset)
                     relation['Arg1']['RawText'] = get_raw_tokens(doc_words, relation['Arg1']['TokenList'])
                     relation['Arg2']['RawText'] = get_raw_tokens(doc_words, relation['Arg2']['TokenList'])
                     relation['Confidences']['Arg1'] = arg1_c
@@ -170,10 +174,12 @@ class DiscourseParser(object):
                     'TokenList': []
                 },
                 'Arg1': {
-                    'TokenList': get_token_list(doc_words, list(range((token_id - len(sent_prev_parse.leaves())), token_id - 1)), sent_id-1, sent_lengths[-2])
+                    'TokenList': get_token_list(doc_words, list(range(len(sent_prev_parse.leaves()))), sent_id - 1,
+                                                sum(sent_lengths[:-2]))
                 },
                 'Arg2': {
-                    'TokenList': get_token_list(doc_words, list(range(token_id, (token_id + len(sent_parse.leaves()) - 1))), sent_id, sent_lengths[-1])
+                    'TokenList': get_token_list(doc_words, list(range(len(sent_parse.leaves()))), sent_id,
+                                                sum(sent_lengths[:-1]))
                 },
                 'Type': 'Implicit',
                 'Sense': [sense],
