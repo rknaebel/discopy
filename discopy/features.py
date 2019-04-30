@@ -130,3 +130,11 @@ def get_pos_features(ptree, leaf_index, head, position):
     pos_conn_tag = "{},{}".format(pos, conn_tag)
 
     return word, word_head, pos, pos_conn_tag
+
+
+def get_index_tree(ptree):
+    tree = ptree.copy(deep=True)
+    for idx, _ in enumerate(tree.leaves()):
+        tree_location = tree.leaf_treeposition(idx)
+        tree[tree_location[:-1]][0] = idx
+    return tree
