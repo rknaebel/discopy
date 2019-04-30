@@ -101,7 +101,7 @@ def evaluate_connectives(gold_list, predicted_list):
 
 
 def span_almost_exact_matching(gold_span, predicted_span):
-    return compute_span_f1(gold_span, predicted_span) > 0.95
+    return compute_span_f1(gold_span, predicted_span) > 0.9
 
 
 def compute_span_f1(g_index_set: set, p_index_set: set) -> float:

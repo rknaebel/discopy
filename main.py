@@ -39,6 +39,15 @@ def main():
         gold_relations = load_relations([json.loads(s) for s in open(args.pdtb, 'r').readlines()])
         pred_relations = load_relations([json.loads(s) for s in open(args.out, 'r').readlines()])
         discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations)
+    elif args.mode == 'run-eval':
+        parser.load(args.dir)
+        relations = parser.parse_file(args.parses)
+        with open(args.out, 'w') as fh:
+            fh.writelines('\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
+        gold_relations = load_relations([json.loads(s) for s in open(args.pdtb, 'r').readlines()])
+        pred_relations = load_relations(relations)
+        discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations)
+
     else:
         raise ValueError('Unknown mode')
 
