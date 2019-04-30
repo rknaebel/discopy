@@ -1,10 +1,12 @@
-import json
 import os
 import pickle
+import ujson as json
 from collections import defaultdict
-from typing import Dict, List
 
 import nltk
+import sklearn
+import sklearn.pipeline
+from typing import Dict, List
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives
@@ -117,7 +119,7 @@ def group_by_doc_id(pdtb: list) -> Dict[str, list]:
 
 def generate_pdtb_features(pdtb, parses):
     chm = ConnHeadMapper()
-    featureSets = []
+    features = []
     pdtb = group_by_doc_id(pdtb)
     for doc_id, doc in parses.items():
         for sentence in doc['sentences']:
@@ -147,21 +149,25 @@ def generate_pdtb_features(pdtb, parses):
                         if cOBConnective <= cOBWord and cOEWord <= cOEConnective:
                             l = [string.lower() for string in connective.split()]
                             if (word in l):
-                                featureSets.append((get_features(parsetree, tokenNo), 'Y'))
+                                features.append((get_features(parsetree, tokenNo), 1))
                                 break
                     else:
                         try:
                             # use connective candidate as negative example if there is no relation marked in PDTB
-                            featureSets.append((get_features(parsetree, tokenNo), 'N'))
+                            features.append((get_features(parsetree, tokenNo), 0))
                         # TODO remove later after fixing data pre-processing
                         except IndexError:
                             print(doc_id, connective_candidate, skip, tokenNo, word_idx)
-    return featureSets
+    return list(zip(*features))
 
 
 class ConnectiveClassifier:
     def __init__(self):
-        self.model = None
+        self.model = sklearn.pipeline.Pipeline([
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs'))
+        ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'connective_clf.p'), 'rb'))
@@ -169,42 +175,37 @@ class ConnectiveClassifier:
     def save(self, path):
         pickle.dump(self.model, open(os.path.join(path, 'connective_clf.p'), 'wb'))
 
-    def fit(self, pdtb, parses, max_iter=5):
-        features = generate_pdtb_features(pdtb, parses)
-        self.fit_on_features(features, max_iter=max_iter)
-
-    def fit_on_features(self, features, max_iter=5):
-        self.model = nltk.MaxentClassifier.train(features, max_iter=max_iter)
-
-    def predict(self, X):
-        pass
+    def fit(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        self.model.fit(X, y)
 
     def get_connective(self, parsetree, sentence, word_idx) -> (List[str], float):
-        # TODO prob_classify function for confidence of classifier
         candidate = match_connectives(sentence, word_idx)
         if not candidate:
             return [], 1.0
         else:
-            conn_label = self.model.prob_classify(
-                get_features(parsetree, list(range(word_idx, word_idx + len(candidate)))))
-            if conn_label.max() is 'N':
-                return [], conn_label.prob('N')
+            x = get_features(parsetree, list(range(word_idx, word_idx + len(candidate))))
+            probs = self.model.predict_proba([x])[0]
+            if probs.argmax() == 0:
+                return [], probs[0]
             else:
-                return candidate, conn_label.prob('Y')
+                return candidate, probs[1]
 
 
 if __name__ == "__main__":
-    trainpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    trainparses = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    devpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    devparses = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    pdtb_train = [json.loads(s) for s in
+                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
 
     print('....................................................................TRAINING..................')
     clf = ConnectiveClassifier()
-    train_data = generate_pdtb_features(trainpdtb, trainparses)
-    clf.fit_on_features(train_data)
+    X, y = generate_pdtb_features(pdtb_train, parses_train)
+    clf.model.fit(X, y)
     print('....................................................................ON TRAINING DATA..................')
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, train_data)))
+    print('ACCURACY {}'.format(clf.model.score(X, y)))
     print('....................................................................ON DEVELOPMENT DATA..................')
-    val_data = generate_pdtb_features(devpdtb, devparses)
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, val_data)))
+    X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
+    print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
+    clf.save('../tmp')
