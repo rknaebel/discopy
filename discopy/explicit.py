@@ -3,18 +3,11 @@ import os
 import pickle
 
 import nltk
+import sklearn
+import sklearn.pipeline
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_connective_sentence_position, lca
-
-
-def findHead(pdtb):
-    chm = ConnHeadMapper()
-    for number, relation in enumerate(pdtb):
-        if relation['Type'] == 'Explicit':
-            head, indices = chm.map_raw_connective(relation['Connective']['RawText'])
-            pdtb[number]['ConnectiveHead'] = head
-    return pdtb
 
 
 def get_features(relation, ptree):
@@ -41,7 +34,6 @@ def get_features(relation, ptree):
 
 
 def generate_pdtb_features(pdtb, parses):
-    findHead(pdtb)
     features = []
     for relation in filter(lambda i: i['Type'] == 'Explicit', pdtb):
         sentenceOffSet = relation['Connective']['TokenList'][0][3]
@@ -54,12 +46,16 @@ def generate_pdtb_features(pdtb, parses):
         if not ptree.leaves():
             continue
         features.append((get_features(relation, ptree), sense))
-    return features
+    return list(zip(*features))
 
 
 class ExplicitSenseClassifier:
     def __init__(self):
-        self.model = None
+        self.model = sklearn.pipeline.Pipeline([
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1))
+        ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'explicit_clf.p'), 'rb'))
@@ -67,33 +63,30 @@ class ExplicitSenseClassifier:
     def save(self, path):
         pickle.dump(self.model, open(os.path.join(path, 'explicit_clf.p'), 'wb'))
 
-    def fit(self, pdtb, parses, max_iter=5):
-        features = generate_pdtb_features(pdtb, parses)
-        self.fit_on_features(features, max_iter=max_iter)
-
-    def fit_on_features(self, features, max_iter=5):
-        self.model = nltk.MaxentClassifier.train(features, max_iter=max_iter)
-
-    def predict(self, X):
-        pass
+    def fit(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        self.model.fit(X, y)
 
     def get_sense(self, relation, ptree):
-        features = get_features(relation, ptree)
-        sense = self.model.prob_classify(features)
-        return sense.max(), sense.prob(sense.max())
+        x = get_features(relation, ptree)
+        probs = self.model.predict_proba([x])[0]
+        return self.model.classes_[probs.argmax()], probs.max()
 
 
 if __name__ == "__main__":
-    trainpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    trainparses = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    devpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    devparses = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    pdtb_train = [json.loads(s) for s in
+                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
 
-    train_data = generate_pdtb_features(trainpdtb, trainparses)
+    print('....................................................................TRAINING..................')
     clf = ExplicitSenseClassifier()
-    clf.fit_on_features(train_data)
+    X, y = generate_pdtb_features(pdtb_train, parses_train)
+    clf.model.fit(X, y)
     print('....................................................................ON TRAINING DATA..................')
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, train_data)))
+    print('ACCURACY {}'.format(clf.model.score(X, y)))
     print('....................................................................ON DEVELOPMENT DATA..................')
-    val_data = generate_pdtb_features(devpdtb, devparses)
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, val_data)))
+    X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
+    print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
+    clf.save('../tmp')

@@ -39,7 +39,7 @@ class DiscourseParser(object):
         print('Train Argument Extractor...')
         self.arg_extract_clf.fit(pdtb, parses)
         print('Train Explicit Sense Classifier...')
-        self.explicit_clf.fit(pdtb, parses, max_iter=epochs)
+        self.explicit_clf.fit(pdtb, parses)
         print('Train Non-Explicit Sense Classifier...')
         self.non_explicit_clf.fit(pdtb, parses)
 
