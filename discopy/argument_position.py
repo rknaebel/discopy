@@ -1,8 +1,10 @@
-import json
 import os
 import pickle
+import ujson as json
 
 import nltk
+import sklearn
+import sklearn.pipeline
 from nltk.tree import ParentedTree
 
 import discopy.conn_head_mapper
@@ -51,47 +53,47 @@ def generate_pdtb_features(pdtb, parses):
             features.append((get_features(ptree, connective_raw, leaf_indices), 'PS'))
         elif len(arg1) == 1 and len(arg2) == 1 and arg1[0] == arg2[0]:
             features.append((get_features(ptree, connective_raw, leaf_indices), 'SS'))
-    return features
+    return list(zip(*features))
 
 
 class ArgumentPositionClassifier:
     def __init__(self):
-        self.pos_model = None
+        self.model = sklearn.pipeline.Pipeline([
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs'))
+        ])
 
     def load(self, path):
-        self.pos_model = pickle.load(open(os.path.join(path, 'position_clf.p'), 'rb'))
+        self.model = pickle.load(open(os.path.join(path, 'position_clf.p'), 'rb'))
 
     def save(self, path):
-        pickle.dump(self.pos_model, open(os.path.join(path, 'position_clf.p'), 'wb'))
+        pickle.dump(self.model, open(os.path.join(path, 'position_clf.p'), 'wb'))
 
-    def fit(self, pdtb, parses, max_iter=5):
-        pos_features = generate_pdtb_features(pdtb, parses)
-        self.fit_on_features(pos_features, max_iter=max_iter)
-
-    def fit_on_features(self, pos_features, max_iter=5):
-        self.pos_model = nltk.MaxentClassifier.train(pos_features, max_iter=max_iter)
-
-    def predict(self, X):
-        pass
+    def fit(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        self.model.fit(X, y)
 
     def get_argument_position(self, parse, connective: str, leaf_index):
-        features = get_features(parse, connective, leaf_index)
-        arg_position = self.pos_model.prob_classify(features)
-        return arg_position.max(), arg_position.prob(arg_position.max())
+        x = get_features(parse, connective, leaf_index)
+        probs = self.model.predict_proba([x])[0]
+        return self.model.classes_[probs.argmax()], probs.max()
 
 
 if __name__ == "__main__":
-    trainpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    trainparses = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    devpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    devparses = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    pdtb_train = [json.loads(s) for s in
+                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
 
-    trainfeatureSet = generate_pdtb_features(trainpdtb, trainparses)
-    devfeatureSet = generate_pdtb_features(devpdtb, devparses)
+    print('....................................................................TRAINING..................')
     clf = ArgumentPositionClassifier()
-    clf.fit_on_features(trainfeatureSet, max_iter=5)
-    print('......................................ON TRAINING DATA..................')
-    print('Accuracy = ', nltk.classify.accuracy(clf.pos_model, trainfeatureSet))
-
-    print('......................................ON DEVELOPMENT DATA..................')
-    print('Accuracy = ', nltk.classify.accuracy(clf.pos_model, devfeatureSet))
+    X, y = generate_pdtb_features(pdtb_train, parses_train)
+    clf.model.fit(X, y)
+    print('....................................................................ON TRAINING DATA..................')
+    print('ACCURACY {}'.format(clf.model.score(X, y)))
+    print('....................................................................ON DEVELOPMENT DATA..................')
+    X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
+    print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
+    clf.save('../tmp')

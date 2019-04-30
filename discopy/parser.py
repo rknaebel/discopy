@@ -35,7 +35,7 @@ class DiscourseParser(object):
         print('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
         print('Train ArgPosition Classifier...')
-        self.arg_pos_clf.fit(pdtb, parses, max_iter=epochs)
+        self.arg_pos_clf.fit(pdtb, parses)
         print('Train Argument Extractor...')
         self.arg_extract_clf.fit(pdtb, parses, max_iter=epochs)
         print('Train Explicit Sense Classifier...')
