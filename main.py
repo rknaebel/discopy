@@ -19,6 +19,8 @@ argument_parser.add_argument("--epochs", help="",
                              default=10, type=int)
 argument_parser.add_argument("--out", help="",
                              default='output.json')
+argument_parser.add_argument("--eval-threshold", help="",
+                             default=0.9, type=float)
 args = argument_parser.parse_args()
 
 
@@ -38,7 +40,7 @@ def main():
     elif args.mode == 'eval':
         gold_relations = load_relations([json.loads(s) for s in open(args.pdtb, 'r').readlines()])
         pred_relations = load_relations([json.loads(s) for s in open(args.out, 'r').readlines()])
-        discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations)
+        discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, args.eval_threshold)
     elif args.mode == 'run-eval':
         parser.load(args.dir)
         relations = parser.parse_file(args.parses)
@@ -46,8 +48,7 @@ def main():
             fh.writelines('\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
         gold_relations = load_relations([json.loads(s) for s in open(args.pdtb, 'r').readlines()])
         pred_relations = load_relations(relations)
-        discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations)
-
+        discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, args.eval_threshold)
     else:
         raise ValueError('Unknown mode')
 
