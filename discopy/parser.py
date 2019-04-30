@@ -37,7 +37,7 @@ class DiscourseParser(object):
         print('Train ArgPosition Classifier...')
         self.arg_pos_clf.fit(pdtb, parses)
         print('Train Argument Extractor...')
-        self.arg_extract_clf.fit(pdtb, parses, max_iter=epochs)
+        self.arg_extract_clf.fit(pdtb, parses)
         print('Train Explicit Sense Classifier...')
         self.explicit_clf.fit(pdtb, parses, max_iter=epochs)
         print('Train Non-Explicit Sense Classifier...')
@@ -145,6 +145,8 @@ class DiscourseParser(object):
                     relation['Arg2']['RawText'] = get_raw_tokens(doc_words, relation['Arg2']['TokenList'])
                     relation['Confidences']['Arg1'] = arg1_c
                     relation['Confidences']['Arg2'] = arg2_c
+                else:
+                    raise ValueError('Unknown Argument Position')
 
                 # EXPLICIT SENSE
                 explicit, explicit_c = self.explicit_clf.get_sense(relation, sent_parse)

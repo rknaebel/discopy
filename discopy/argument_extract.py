@@ -1,9 +1,10 @@
-import json
 import os
 import pickle
+import ujson as json
 
 import nltk
-import numpy as np
+import sklearn
+import sklearn.pipeline
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
@@ -54,9 +55,9 @@ def get_features(clauses, conn_head, indices, ptree):
         conn2clause_path = get_clause_direction_path(connective, clause)
         conn2root_path = get_root_path(clause)
 
-        feat = {'connectiveString': conn_head, 'connectivePOS': connective.label(), 'leftSibNo': left_siblings_no,
+        feat = {'connectiveString': conn_head, 'connectivePOS': str(connective.label()), 'leftSibNo': left_siblings_no,
                 'rightSibNo': right_siblings_no, 'connCategory': conn_cat, 'clauseRelPosition': relative_position,
-                'clauseContext': clause_context, 'conn2clausePath': conn2clause_path,
+                'clauseContext': clause_context, 'conn2clausePath': str(conn2clause_path),
                 'conn2rootPath': conn2root_path}
 
         clause = ' '.join(clause.leaves())
@@ -130,13 +131,23 @@ def generate_pdtb_features(pdtb, parses):
             ps_features.extend(
                 extract_ps_arguments(clauses, relation['ConnectiveHead'], indices, ptree,
                                      relation['Arg2']['RawText']))
-    return ss_features, ps_features
+    return list(zip(*ss_features)), list(zip(*ps_features))
 
 
 class ArgumentExtractClassifier:
     def __init__(self):
-        self.ss_model = None
-        self.ps_model = None
+        self.ss_model = sklearn.pipeline.Pipeline([
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=500)),
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial',
+                                                              n_jobs=-1, max_iter=150))
+        ])
+        self.ps_model = sklearn.pipeline.Pipeline([
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=500)),
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial',
+                                                              n_jobs=-1, max_iter=150))
+        ])
 
     def load(self, path):
         self.ss_model = pickle.load(open(os.path.join(path, 'ss_extract_clf.p'), 'rb'))
@@ -146,16 +157,10 @@ class ArgumentExtractClassifier:
         pickle.dump(self.ss_model, open(os.path.join(path, 'ss_extract_clf.p'), 'wb'))
         pickle.dump(self.ps_model, open(os.path.join(path, 'ps_extract_clf.p'), 'wb'))
 
-    def fit(self, pdtb, parses, max_iter=5):
-        ss_features, ps_features = generate_pdtb_features(pdtb, parses)
-        self.fit_on_features(ss_features, ps_features, max_iter=max_iter)
-
-    def fit_on_features(self, ss_features, ps_features, max_iter=5):
-        self.ss_model = nltk.MaxentClassifier.train(ss_features, max_iter=max_iter)
-        self.ps_model = nltk.MaxentClassifier.train(ps_features, max_iter=max_iter)
-
-    def predict(self, X):
-        pass
+    def fit(self, pdtb, parses):
+        (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(pdtb, parses)
+        self.ss_model.fit(X_ss, y_ss)
+        self.ps_model.fit(X_ps, y_ps)
 
     def extract_arguments(self, ptree, relation):
         indices = [token[4] for token in relation['Connective']['TokenList']]
@@ -163,49 +168,51 @@ class ArgumentExtractClassifier:
         conn_head, _ = chm.map_raw_connective(relation['Connective']['RawText'])
         ptree._label = 'S'
         clauses = get_clauses(ptree)
+        ptree_ids = get_index_tree(ptree)
 
-        features = [i[0] for i in get_features(clauses, conn_head, indices, ptree)]
-
+        X = [i[0] for i in get_features(clauses, conn_head, indices, ptree)]
         if relation['ArgPos'] == 'SS':
-            preds = self.ss_model.prob_classify_many(features)
+            probs = self.ss_model.predict_proba(X)
+            _, arg1_max_idx, arg2_max_idx = probs.argmax(axis=0)
+            _, arg1_prob, arg2_prob = probs.max(axis=0)
 
+            arg1 = set(ptree_ids[clauses[arg1_max_idx][1]].leaves())
+            arg2 = set(ptree_ids[clauses[arg2_max_idx][1]].leaves())
+            if arg1.issubset(arg2):
+                arg2 = arg2 - arg1
+            elif arg1.issuperset(arg2):
+                arg1 = arg1 - arg2
         elif relation['ArgPos'] == 'PS':
-            preds = self.ps_model.prob_classify_many(features)
+            probs = self.ps_model.predict_proba(X)
+            _, arg2_max_idx = probs.argmax(axis=0)
+            _, arg2_prob = probs.max(axis=0)
+            arg1_prob = 1.0
 
+            arg1 = set()
+            arg2 = set(ptree_ids[clauses[arg2_max_idx][1]].leaves())
         else:
             raise NotImplementedError('Unknown argument position')
 
-        arg1_probs = np.array([pred.prob('Arg1') for pred in preds])
-        arg2_probs = np.array([pred.prob('Arg2') for pred in preds])
-
-        ptree_ids = get_index_tree(ptree)
-
-        arg1 = set(ptree_ids[clauses[arg1_probs.argmax()][1]].leaves())
-        arg2 = set(ptree_ids[clauses[arg2_probs.argmax()][1]].leaves())
-        if arg1.issubset(arg2):
-            arg2 = arg2 - arg1
-        elif arg1.issuperset(arg2):
-            arg1 = arg1 - arg2
-
-        return sorted(arg1), sorted(arg2), arg1_probs.max(), arg2_probs.max()
+        return sorted(arg1), sorted(arg2), arg1_prob, arg2_prob
 
 
 if __name__ == "__main__":
-    trainpdtb = [json.loads(s) for s in
-                 open('../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    trainparses = json.loads(open('../discourse/data/conll2016/en.train/parses.json').read())
-    devpdtb = [json.loads(s) for s in open('../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    devparses = json.loads(open('../discourse/data/conll2016/en.dev/parses.json').read())
+    pdtb_train = [json.loads(s) for s in
+                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
 
     print('....................................................................TRAINING..................')
     clf = ArgumentExtractClassifier()
-    train_ss_data, train_ps_data = generate_pdtb_features(trainpdtb, trainparses)
-    clf.fit_on_features(train_ss_data, train_ps_data, max_iter=5)
-    clf.save('tmp')
+    (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(pdtb_train, parses_train)
+    clf.ss_model.fit(X_ss, y_ss)
+    clf.ps_model.fit(X_ps, y_ps)
     print('....................................................................ON TRAINING DATA..................')
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.ss_model, train_ss_data)))
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.ps_model, train_ps_data)))
+    print('ACCURACY {}'.format(clf.ss_model.score(X_ss, y_ss)))
+    print('ACCURACY {}'.format(clf.ps_model.score(X_ps, y_ps)))
     print('....................................................................ON DEVELOPMENT DATA..................')
-    val_ss_data, val_ps_data = generate_pdtb_features(devpdtb, devparses)
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.ss_model, val_ss_data)))
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.ps_model, val_ps_data)))
+    (X_val_ss, y_val_ss), (X_val_ps, y_val_ps) = generate_pdtb_features(pdtb_val, parses_val)
+    print('ACCURACY {}'.format(clf.ss_model.score(X_val_ss, y_val_ss)))
+    print('ACCURACY {}'.format(clf.ps_model.score(X_val_ps, y_val_ps)))
+    clf.save('../tmp')
