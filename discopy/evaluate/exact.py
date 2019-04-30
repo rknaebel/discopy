@@ -100,12 +100,8 @@ def evaluate_connectives(gold_list, predicted_list):
     return connective_cm
 
 
-def span_exact_matching(gold_span, predicted_span):
-    return gold_span == predicted_span
-
-
 def span_almost_exact_matching(gold_span, predicted_span):
-    return compute_span_f1(gold_span, predicted_span) > 0.7
+    return compute_span_f1(gold_span, predicted_span) > 0.95
 
 
 def compute_span_f1(g_index_set: set, p_index_set: set) -> float:
@@ -117,23 +113,12 @@ def compute_span_f1(g_index_set: set, p_index_set: set) -> float:
     return 2 * (precision * recall) / (precision + recall)
 
 
-# TODO changed because of different implementation of relations that stores only indices instead of words
-# use F1 overlapping score instead of the original score, which leads to minor changes in the final result
-# misses connective head mapping
-def connective_head_matching(gold_connective: set, predicted_connective):
-    if gold_connective == predicted_connective:
-        return True
-    else:
-        return span_almost_exact_matching(gold_connective, predicted_connective)
-
-
 def evaluate_sense(gold_list, predicted_list):
     tp = fp = fn = 0
     gold_to_predicted_map = _link_gold_predicted(gold_list, predicted_list)
     for gi, gr in enumerate(gold_list):
         if gi in gold_to_predicted_map:
-            senses = [s for s in predicted_list[gold_to_predicted_map[gi]].senses if s in gr.senses]
-            if senses:
+            if any(g in predicted_list[gold_to_predicted_map[gi]].senses for g in gr.senses):
                 tp += 1
             else:
                 fp += 1
@@ -144,22 +129,18 @@ def evaluate_sense(gold_list, predicted_list):
 
 
 def compute_confusion_counts(gold_list, predicted_list, matching_fn):
-    tp = fp = fn = 0
-    matched_predicted = [False for _ in predicted_list]
+    tp = fp = 0
+    unmatched = np.ones(len(predicted_list), dtype=bool)
     for gold_span in gold_list:
-        found_match = False
         for i, predicted_span in enumerate(predicted_list):
-            if matching_fn(gold_span, predicted_span) and not matched_predicted[i]:
+            if matching_fn(gold_span, predicted_span) and unmatched[i]:
                 tp += 1
-                matched_predicted[i] = True
-                found_match = True
+                unmatched[i] = 0
                 break
-        if not found_match:
+        else:
             fp += 1
     # Predicted span that does not match with any
-    for matched in matched_predicted:
-        if not matched:
-            fn += 1
+    fn = unmatched.sum()
 
     return np.array([tp, fp, fn])
 

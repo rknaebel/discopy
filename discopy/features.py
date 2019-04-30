@@ -11,7 +11,7 @@ def get_root_path(clause) -> str:
     return "-".join(path)
 
 
-def get_clause_context(clause):
+def get_clause_context(clause) -> str:
     clause_pos = clause.label()
     clause_parent_pos = clause.parent().label() if clause.parent() else 'NULL'
     if clause.left_sibling():
@@ -26,7 +26,7 @@ def get_clause_context(clause):
     return clause_context
 
 
-def get_connective_category(conn_head):
+def get_connective_category(conn_head) -> str:
     if conn_head in discourse_adverbial:
         conn_cat = 'Adverbial'
     elif conn_head in coordinating_connective:
@@ -34,7 +34,7 @@ def get_connective_category(conn_head):
     elif conn_head in subordinating_connective:
         conn_cat = 'Subordinating'
     else:
-        conn_cat = None
+        conn_cat = 'NULL'
     return conn_cat
 
 
@@ -48,7 +48,7 @@ def get_relative_position(pos1, pos2):
     return 'contains'
 
 
-def height(clause):
+def height(clause) -> int:
     i = 0
     while clause.parent() and (clause.parent().label() != ''):
         clause = clause.parent()
@@ -56,11 +56,11 @@ def height(clause):
     return i
 
 
-def get_clause_direction_path(conn, clause):
+def get_clause_direction_path(conn, clause) -> str:
     if height(conn) == height(conn.root()):
-        return conn.label()
+        return str(conn.label())
     if height(conn) == height(clause):
-        return conn.label() + 'U' + conn.parent().label() + 'D' + clause.label()
+        return str(conn.label() + 'U' + conn.parent().label() + 'D' + clause.label())
     elif height(conn) > height(clause):
         distance = height(conn) - height(clause) + 1
         p = conn.label()
@@ -78,10 +78,10 @@ def get_clause_direction_path(conn, clause):
             distance -= 1
         d = 'D' + clause.label()
         p += d
-        return p
+        return str(p)
 
 
-def get_sibling_counts(ptree: ParentedTree):
+def get_sibling_counts(ptree: ParentedTree) -> (int, int):
     if not ptree.parent():
         return 0, 0
     left_siblings = ptree.parent_index()
