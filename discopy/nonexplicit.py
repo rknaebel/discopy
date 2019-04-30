@@ -1,9 +1,11 @@
-import json
 import os
 import pickle
+import ujson as json
 from collections import Counter
 
 import nltk
+import sklearn
+import sklearn.pipeline
 
 
 def get_production_rules(ptree):
@@ -14,13 +16,9 @@ def extract_productions(ptrees):
     return [production for ptree in ptrees for production in get_production_rules(ptree)]
 
 
-def get_features(parse_trees, all_productions):
+def get_features(parse_trees):
     productions = set(extract_productions(parse_trees))
-
-    feat = {}
-    for p in all_productions:
-        feat[p] = str(p in productions)
-    return feat
+    return productions
 
 
 def generate_production_rules(pdtb, parses, min_occurrence=5):
@@ -41,41 +39,8 @@ def generate_production_rules(pdtb, parses, min_occurrence=5):
     return all_productions
 
 
-# {'AltLex': {'Comparison.Concession',
-#             'Comparison.Contrast',
-#             'Contingency.Cause.Reason',
-#             'Contingency.Cause.Result',
-#             'Contingency.Condition',
-#             'Expansion',
-#             'Expansion.Conjunction',
-#             'Expansion.Exception',
-#             'Expansion.Instantiation',
-#             'Expansion.Restatement',
-#             'Temporal.Asynchronous.Precedence',
-#             'Temporal.Asynchronous.Succession',
-#             'Temporal.Synchrony'},
-#  'EntRel': {'EntRel'},
-#  'Implicit': {'Comparison',
-#               'Comparison.Concession',
-#               'Comparison.Contrast',
-#               'Contingency',
-#               'Contingency.Cause',
-#               'Contingency.Cause.Reason',
-#               'Contingency.Cause.Result',
-#               'Contingency.Condition',
-#               'Expansion',
-#               'Expansion.Alternative',
-#               'Expansion.Alternative.Chosen alternative',
-#               'Expansion.Conjunction',
-#               'Expansion.Exception',
-#               'Expansion.Instantiation',
-#               'Expansion.Restatement',
-#               'Temporal',
-#               'Temporal.Asynchronous.Precedence',
-#               'Temporal.Asynchronous.Succession',
-#               'Temporal.Synchrony'}}
-def generate_pdtb_features(pdtb, parses, production_rules):
-    feature_set = []
+def generate_pdtb_features(pdtb, parses):
+    features = []
     for relation in filter(lambda i: i['Type'] != 'Explicit', pdtb):
         sentence_ids = {t[3] for a in ['Arg1', 'Arg2'] for t in relation[a]['TokenList']}
         doc = relation['DocID']
@@ -86,57 +51,49 @@ def generate_pdtb_features(pdtb, parses, production_rules):
         except ValueError:
             continue
         sense = relation['Sense'][0]
-        feature_set.append((get_features(parse_trees, production_rules), sense))
+        features.append((get_features(parse_trees), sense))
 
-    return feature_set
+    return list(zip(*features))
 
 
 class NonExplicitSenseClassifier:
     def __init__(self):
-        self.model = None
-        self.prod_rules = []
+        self.model = sklearn.pipeline.Pipeline([
+            ('vectorizer', sklearn.feature_extraction.text.CountVectorizer(analyzer=set)),
+            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1))
+        ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'non_explicit_clf.p'), 'rb'))
-        self.prod_rules = pickle.load(open(os.path.join(path, 'non_explicit_prod_rules.p'), 'rb'))
 
     def save(self, path):
         pickle.dump(self.model, open(os.path.join(path, 'non_explicit_clf.p'), 'wb'))
-        pickle.dump(self.prod_rules, open(os.path.join(path, 'non_explicit_prod_rules.p'), 'wb'))
 
-    def fit(self, pdtb, parses, max_iter=5):
-        prod_rules = generate_production_rules(pdtb, parses)
-        features = generate_pdtb_features(pdtb, parses, prod_rules)
-        clf = nltk.NaiveBayesClassifier.train(features)
-        self.prod_rules = [p for p, l in clf.most_informative_features(100)]
-        features = generate_pdtb_features(pdtb, parses, self.prod_rules)
-        self.fit_on_features(features, max_iter=max_iter)
-
-    def fit_on_features(self, features, max_iter=5):
-        self.model = nltk.MaxentClassifier.train(features, max_iter=max_iter)
-
-    def predict(self, X):
-        pass
+    def fit(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        self.model.fit(X, y)
 
     def get_sense(self, sents):
-        features = get_features(sents, self.prod_rules)
-        sense = self.model.prob_classify(features)
-        return sense.max(), sense.prob(sense.max())
+        x = get_features(sents)
+        probs = self.model.predict_proba([x])[0]
+        return self.model.classes_[probs.argmax()], probs.max()
 
 
 if __name__ == "__main__":
-    trainpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    trainparses = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    devpdtb = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    devparses = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    pdtb_train = [json.loads(s) for s in
+                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
 
-    all_productions, train_data = generate_pdtb_features(trainpdtb, trainparses)
+    print('....................................................................TRAINING..................')
     clf = NonExplicitSenseClassifier()
-    clf.prod_rules = all_productions
-    clf.fit_on_features(train_data)
-    clf.save('tmp')
+    X, y = generate_pdtb_features(pdtb_train, parses_train)
+    clf.model.fit(X, y)
     print('....................................................................ON TRAINING DATA..................')
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, train_data)))
+    print('ACCURACY {}'.format(clf.model.score(X, y)))
     print('....................................................................ON DEVELOPMENT DATA..................')
-    val_data = generate_pdtb_features(devpdtb, devparses)
-    print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, val_data)))
+    X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
+    print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
+    clf.save('../tmp')

@@ -41,7 +41,7 @@ class DiscourseParser(object):
         print('Train Explicit Sense Classifier...')
         self.explicit_clf.fit(pdtb, parses, max_iter=epochs)
         print('Train Non-Explicit Sense Classifier...')
-        self.non_explicit_clf.fit(pdtb, parses, max_iter=epochs)
+        self.non_explicit_clf.fit(pdtb, parses)
 
     def save(self, path):
         if not os.path.exists(path):
