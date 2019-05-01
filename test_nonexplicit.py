@@ -4,6 +4,27 @@ import discopy.nonexplicit
 
 class TestNonexplicit(unittest.TestCase):
 
+    def test_mutual_information(self):
+        """
+            Tests the correct calculation of the MutualInformation score.
+            Example taken from: https://nlp.stanford.edu/IR-book/html/htmledition/mutual-information-1.html
+        """
+        clf = discopy.nonexplicit.NonExplicitSenseClassifier()
+
+        terms = {'export', 'apple'}
+        classes = {'poultry', 'pig'}
+
+        n_11 = [('export', 'poultry')] * 49
+        n_01 = [('apple', 'poultry')] * 141
+        n_10 = [('export', 'pig')] * 27652
+        n_00 = [('apple', 'pig')] * 774106
+        n = n_11 + n_01 + n_10 + n_00
+        rels = [[[a]] for (a, b) in n]
+        senses = [b for (a, b) in n]
+
+        _, mis = clf.select_by_mutual_information(rels, senses, terms, 2)
+        self.assertEqual(mis['export'], 0.00011053558610110263)
+
     def test_production_rules(self):
         """
             Tests the correct extraction of production rules from a tree.

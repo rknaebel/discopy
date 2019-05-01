@@ -3,7 +3,8 @@ import os
 import sys
 import pickle
 import random
-from collections import Counter
+import math
+from collections import Counter, defaultdict
 
 import nltk
 from nltk.stem.porter import *
@@ -305,6 +306,70 @@ class NonExplicitSenseClassifier(object):
 
         return feat
 
+    def read_reference_file(self, fname):
+        return [r.split()[0].replace('_', ' ') for r in open(fname).readlines()]
+
+    # https://nlp.stanford.edu/IR-book/html/htmledition/mutual-information-1.html
+    def select_by_mutual_information(self, rels, senses, feats, num_select):
+        classes = set(senses)
+
+        if self.DEBUG:
+            print('--MutualInformation--')
+            print(' -> ' + str(len(classes)) + ' classes')
+            print(' -> ' + str(len(feats)) + ' features')
+
+        d = defaultdict(int)
+        n_all = 0
+        lst = []
+        for i, (f, s) in enumerate(zip(rels, senses)):
+            for r in f:
+                for a in r:
+                    if a in feats:
+                        lst.append((a, s))
+                        n_all += 1
+
+        cnt_11 = Counter(lst)
+        cnt__1 = Counter(s for f, s in lst)
+        cnt_1_ = Counter(f for f, s in lst)
+
+        mis = {} 
+        for i, f in enumerate(feats):
+            tmp = []
+            for cl in classes:
+                #n_<feat><class>
+                n_11 = cnt_11[(f, cl)]
+                if n_11 <= 0:
+                    continue
+                n_01 = cnt__1[cl] - n_11
+                if n_01 <= 0:
+                    continue
+                n_10 = cnt_1_[f] - n_11
+                if n_10 <= 0:
+                    continue
+                n_00 = n_all - n_11 - n_01 - n_10
+                if n_00 <= 0:
+                    continue
+                n = float(n_11 + n_00 + n_01 + n_10)
+
+                n_0_ = float(n_00 + n_01)
+                n__0 = float(n_00 + n_10)
+                n_1_ = float(n_11 + n_10)
+                n__1 = float(n_11 + n_01)
+                
+                mi_11 = n_11/n * math.log((n*n_11)/(n_1_*n__1), 2)
+                mi_01 = n_01/n * math.log((n*n_01)/(n_0_*n__1), 2)
+                mi_10 = n_10/n * math.log((n*n_10)/(n_1_*n__0), 2)
+                mi_00 = n_00/n * math.log((n*n_00)/(n_0_*n__0), 2)
+                mi = mi_11 + mi_01 + mi_10 + mi_00
+                tmp.append(mi)
+            if len(tmp) > 0:
+                mis[f] = max(tmp)
+
+        mis = [(v, k) for k, v in mis.items()]
+        mis.sort(key = lambda x: x[0], reverse=True)
+
+        return [f for mi, f in mis][:num_select], dict((f, mi) for mi, f in mis[:num_select])
+
     # generates the featureset used to train a classifier
     #
     # features are: Production Rules,
@@ -313,6 +378,7 @@ class NonExplicitSenseClassifier(object):
     #               Contextual Features
     #
     def generate_pdtb_features(self, pdtb, parses):
+
         extracted_productions = list(ProductionRuleFeature(pdtb, parses))
         extracted_dependency_rules = list(DependencyRuleFeature(pdtb, parses))
         extracted_context_features = list(ContextFeature(pdtb, parses))
@@ -321,12 +387,15 @@ class NonExplicitSenseClassifier(object):
 
         prod_counter = Counter(p for feature in extracted_productions for p in feature[0].union(feature[1]))
         all_productions = list(p for p, c in prod_counter.items() if c >= 5)
+        #all_productions = self.read_reference_file('data/prod_rules.txt');
 
         dep_counter = Counter(r for feature in extracted_dependency_rules for r in feature[0].union(feature[1]))
         all_dependency_rules = list(r for r, c in dep_counter.items() if c >= 5)
+        #all_dependency_rules = self.read_reference_file('data/dep_rules.txt');
 
         wp_counter = Counter(p for feature in extracted_wordpairs for p in feature)
         all_wordpairs = list(p for p, c in wp_counter.items() if c >= 5)
+        #all_wordpairs = [p.replace(' ', '_') for p in self.read_reference_file('data/word_pair.txt')]
 
         if self.DEBUG:
             # info about the # of features. second row is # as it should be from the paper
@@ -335,6 +404,15 @@ class NonExplicitSenseClassifier(object):
             print('\t#Dependency Rules:\t', len(all_dependency_rules))
             print('\t#Word Pairs:\t\t', len(all_wordpairs))
 
+        all_productions_ref = set(self.read_reference_file('data/prod_rules.txt'))
+        all_productions, _ = set(self.select_by_mutual_information(extracted_productions, extracted_senses, all_productions, 100))
+
+        print('--' * 20 + 'INTERSECTION' + '--' * 20)
+        print(all_productions_ref & all_productions)
+        print('--' * 20 + 'DIFFERENCE' + '--' * 20)
+        print(all_productions - all_productions_ref)
+
+
         feature_set = []
         for (p_arg1, p_arg2), (d_arg1, d_arg2), c_feats, word_pairs, sense in zip(extracted_productions, 
                                                                                   extracted_dependency_rules, 
@@ -342,18 +420,18 @@ class NonExplicitSenseClassifier(object):
                                                                                   extracted_wordpairs,
                                                                                   extracted_senses):
             feat = {}
-            for p in all_productions[:100]:
+            for p in all_productions:
                 feat[p + ':1' ] = str(p in p_arg1)
                 feat[p + ':2' ] = str(p in p_arg2)
                 feat[p + ':12'] = str(p in p_arg1 and p in p_arg2)
-            for r in all_dependency_rules[:100]:
-                feat[r + ':1' ] = str(r in d_arg1)
-                feat[r + ':2' ] = str(r in d_arg2)
-                feat[r + ':12'] = str(r in d_arg1 and r in d_arg2)
-            for wp in all_wordpairs[:500]:
-                feat[wp] = str(wp in word_pairs)
+            #for r in all_dependency_rules[:100]:
+            #    feat[r + ':1' ] = str(r in d_arg1)
+            #    feat[r + ':2' ] = str(r in d_arg2)
+            #    feat[r + ':12'] = str(r in d_arg1 and r in d_arg2)
+            #for wp in all_wordpairs[:500]:
+            #    feat[wp] = str(wp in word_pairs)
 
-            feat.update(c_feats)
+            #feat.update(c_feats)
             feature_set.append((feat, sense))
 
         return all_productions, all_dependency_rules, feature_set
@@ -399,11 +477,11 @@ if __name__ == "__main__":
         trainpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.train/relations.json'), 'r').readlines()]
         trainparses = json.loads(open(os.path.join(CONLL_DIR, 'en.train/parses.json')).read())
         print('\tDevelopment data')
-        devpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.dev/relations.json'), 'r').readlines()]
+        devpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.dev/nonexplicits_only_gold.json'), 'r').readlines()]
         devparses = json.loads(open(os.path.join(CONLL_DIR, 'en.dev/parses.json')).read())
 
         print('\tTesting data')
-        testpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.test/relations.json'), 'r').readlines()]
+        testpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.test/nonexplicits_only_gold.json'), 'r').readlines()]
         testparses = json.loads(open(os.path.join(CONLL_DIR, 'en.test/parses.json')).read())
 
         clf = NonExplicitSenseClassifier(debug=True)
@@ -413,7 +491,7 @@ if __name__ == "__main__":
         #all_productions, all_dep_rules, train_data = clf.generate_pdtb_features(devpdtb, devparses)
         clf.prod_rules = all_productions
         clf.dep_rules = all_dep_rules
-        clf.fit_on_features(train_data)
+        clf.fit_on_features(train_data, max_iter=100)
         print('  ==> Most informative features')
         clf.model.show_most_informative_features()
         clf.save('/tmp')
