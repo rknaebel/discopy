@@ -7,6 +7,9 @@ import nltk
 import sklearn
 import sklearn.pipeline
 
+lemmatizer = nltk.stem.WordNetLemmatizer()
+stemmer = nltk.stem.SnowballStemmer('english')
+
 
 def get_production_rules(ptree):
     return ["{} <- {}".format(t.label(), ' '.join([tt.label() for tt in t]))
@@ -21,14 +24,14 @@ def get_dependencies(dtree):
     feat = defaultdict(list)
     for (d, n1, n2) in dtree:
         feat[n1[:n1.rfind('-')]].append(d)
-    return ["{} <- {}".format(word, ' '.join(deps)) for word, deps in feat.items()]
+    return ["{} <- {}".format(lemmatizer.lemmatize(word).lower(), ' '.join(deps)) for word, deps in feat.items()]
 
 
 def extract_dependencies(dtrees):
     return [deps for dtree in dtrees for deps in get_dependencies(dtree)]
 
 
-def get_features(ptrees_prev, ptrees, dtrees_prev, dtrees):
+def get_features(ptrees_prev, ptrees, dtrees_prev, dtrees, arg1, arg2):
     productions_prev = set(extract_productions(ptrees_prev))
     productions = set(extract_productions(ptrees))
 
@@ -52,6 +55,10 @@ def get_features(ptrees_prev, ptrees, dtrees_prev, dtrees):
         elif d in deps:
             features[d] = 2
 
+    for w1 in arg1:
+        for w2 in arg2:
+            features["({},{})".format(stemmer.stem(w1), stemmer.stem(w2))] = 1
+
     return features
 
 
@@ -71,8 +78,11 @@ def generate_pdtb_features(pdtb, parses):
             arg2_dep_trees = [parses[doc]['sentences'][s_id]['dependencies'] for s_id in arg2_sentence_ids]
         except ValueError:
             continue
+        arg1 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg1']['TokenList']]
+        arg2 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg2']['TokenList']]
         sense = relation['Sense'][0]
-        features.append((get_features(arg1_parse_trees, arg2_parse_trees, arg1_dep_trees, arg2_dep_trees), sense))
+        features.append(
+            (get_features(arg1_parse_trees, arg2_parse_trees, arg1_dep_trees, arg2_dep_trees, arg1, arg2), sense))
 
     return list(zip(*features))
 
@@ -81,8 +91,9 @@ class NonExplicitSenseClassifier:
     def __init__(self):
         self.model = sklearn.pipeline.Pipeline([
             ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
-            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=200)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1))
+            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=500)),
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1,
+                                                              max_iter=200))
         ])
 
     def load(self, path):
@@ -96,8 +107,8 @@ class NonExplicitSenseClassifier:
         self.model.fit(X, y)
         print("Acc:", self.model.score(X, y))
 
-    def get_sense(self, sents_prev, sents, dtree_prev, dtree):
-        x = get_features([sents_prev], [sents], [dtree_prev], [dtree])
+    def get_sense(self, sents_prev, sents, dtree_prev, dtree, arg1, arg2):
+        x = get_features([sents_prev], [sents], [dtree_prev], [dtree], arg1, arg2)
         probs = self.model.predict_proba([x])[0]
         return self.model.classes_[probs.argmax()], probs.max()
 

@@ -9,6 +9,8 @@ import sklearn.pipeline
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_connective_sentence_position, lca
 
+lemmatizer = nltk.stem.WordNetLemmatizer()
+
 
 def get_features(relation, ptree):
     connective = relation['Connective']['RawText']
@@ -24,6 +26,7 @@ def get_features(relation, ptree):
         prev = "NONE"
     else:
         prev = ptree.leaves()[leaf_index[0] - 1][0]
+        prev = lemmatizer.lemmatize(prev)
 
     conn_pos_relative = get_connective_sentence_position(connective_head_index, ptree)
 
@@ -52,9 +55,10 @@ def generate_pdtb_features(pdtb, parses):
 class ExplicitSenseClassifier:
     def __init__(self):
         self.model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
             ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1))
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1,
+                                                              max_iter=200))
         ])
 
     def load(self, path):
@@ -66,6 +70,7 @@ class ExplicitSenseClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
+        print("Acc:", self.model.score(X, y))
 
     def get_sense(self, relation, ptree):
         x = get_features(relation, ptree)

@@ -31,7 +31,7 @@ class DiscourseParser(object):
         self.explicit_clf = ExplicitSenseClassifier()
         self.non_explicit_clf = NonExplicitSenseClassifier()
 
-    def train(self, pdtb, parses, epochs=10):
+    def train(self, pdtb, parses):
         print('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
         print('Train ArgPosition Classifier...')
@@ -79,12 +79,12 @@ class DiscourseParser(object):
         for sent_id, sent in enumerate(doc['sentences']):
             sent_len = len(sent['words'])
             try:
-                sent_parse = nltk.ParentedTree.fromstring(sent['parsetree'])
+                ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
             except ValueError:
                 print('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
                 token_id += sent_len
                 continue
-            if not sent_parse.leaves():
+            if not ptree.leaves():
                 print('Failed on empty tree')
                 token_id += sent_len
                 continue
@@ -99,7 +99,8 @@ class DiscourseParser(object):
                 }
 
                 # CONNECTIVE CLASSIFIER
-                connective, connective_confidence = self.connective_clf.get_connective(sent_parse, sent['words'], current_token)
+                connective, connective_confidence = self.connective_clf.get_connective(ptree, sent['words'],
+                                                                                       current_token)
                 # whenever a position is not identified as connective, go to the next token
                 if not connective:
                     token_id += 1
@@ -114,7 +115,7 @@ class DiscourseParser(object):
 
                 # ARGUMENT POSITION
                 leaf_index = [i[4] for i in relation['Connective']['TokenList']]
-                arg_pos, arg_pos_confidence = self.arg_pos_clf.get_argument_position(sent_parse, ' '.join(connective),
+                arg_pos, arg_pos_confidence = self.arg_pos_clf.get_argument_position(ptree, ' '.join(connective),
                                                                                      leaf_index)
                 relation['ArgPos'] = arg_pos
                 relation['Confidences']['ArgPos'] = arg_pos_confidence
@@ -128,7 +129,7 @@ class DiscourseParser(object):
                 # ARGUMENT EXTRACTION
                 if arg_pos == 'PS':
                     sent_prev = doc['sentences'][sent_id - 1]
-                    _, arg2, arg1_c, arg2_c = self.arg_extract_clf.extract_arguments(sent_parse, relation)
+                    _, arg2, arg1_c, arg2_c = self.arg_extract_clf.extract_arguments(ptree, relation)
                     len_prev = len(sent_prev['words'])
                     relation['Arg1']['TokenList'] = get_token_list(doc_words, list(range(len_prev)), sent_id - 1,
                                                                    sent_offset - len_prev)
@@ -138,7 +139,7 @@ class DiscourseParser(object):
                     relation['Confidences']['Arg2'] = arg2_c
                     inter_relations.add(sent_id)
                 elif arg_pos == 'SS':
-                    arg1, arg2, arg1_c, arg2_c = self.arg_extract_clf.extract_arguments(sent_parse, relation)
+                    arg1, arg2, arg1_c, arg2_c = self.arg_extract_clf.extract_arguments(ptree, relation)
                     relation['Arg1']['TokenList'] = get_token_list(doc_words, arg1, sent_id, sent_offset)
                     relation['Arg2']['TokenList'] = get_token_list(doc_words, arg2, sent_id, sent_offset)
                     relation['Arg1']['RawText'] = get_raw_tokens(doc_words, relation['Arg1']['TokenList'])
@@ -149,7 +150,7 @@ class DiscourseParser(object):
                     raise ValueError('Unknown Argument Position')
 
                 # EXPLICIT SENSE
-                explicit, explicit_c = self.explicit_clf.get_sense(relation, sent_parse)
+                explicit, explicit_c = self.explicit_clf.get_sense(relation, ptree)
                 relation['Sense'] = [explicit]
                 relation['Confidences']['Sense'] = explicit_c
                 output.append(relation)
@@ -166,36 +167,40 @@ class DiscourseParser(object):
                 continue
 
             try:
-                sent_parse = nltk.ParentedTree.fromstring(sent['parsetree'])
-                sent_prev_parse = nltk.ParentedTree.fromstring(doc['sentences'][sent_id - 1]['parsetree'])
+                ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
+                ptree_prev = nltk.ParentedTree.fromstring(doc['sentences'][sent_id - 1]['parsetree'])
+                dtree = sent['dependencies']
+                dtree_prev = doc['sentences'][sent_id - 1]['dependencies']
             except ValueError:
                 print('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
                 continue
 
-            if not sent_parse.leaves() or not sent_prev_parse.leaves():
+            if not ptree.leaves() or not ptree_prev.leaves():
                 continue
 
-            sense, sense_c = self.non_explicit_clf.get_sense([sent_prev_parse, sent_parse])
             relation = {
                 'Connective': {
                     'TokenList': []
                 },
                 'Arg1': {
-                    'TokenList': get_token_list(doc_words, list(range(len(sent_prev_parse.leaves()))), sent_id - 1,
+                    'TokenList': get_token_list(doc_words, list(range(len(ptree_prev.leaves()))), sent_id - 1,
                                                 sum(sent_lengths[:-2]))
                 },
                 'Arg2': {
-                    'TokenList': get_token_list(doc_words, list(range(len(sent_parse.leaves()))), sent_id,
+                    'TokenList': get_token_list(doc_words, list(range(len(ptree.leaves()))), sent_id,
                                                 sum(sent_lengths[:-1]))
                 },
                 'Type': 'Implicit',
-                'Sense': [sense],
-                'Confidences': {
-                    'Sense': sense_c
-                }
+                'Sense': [],
+                'Confidences': {}
             }
             relation['Arg1']['RawText'] = get_raw_tokens(doc_words, relation['Arg1']['TokenList'])
             relation['Arg2']['RawText'] = get_raw_tokens(doc_words, relation['Arg2']['TokenList'])
+            arg1 = [doc_words[i[2]][0] for i in relation['Arg1']['TokenList']]
+            arg2 = [doc_words[i[2]][0] for i in relation['Arg2']['TokenList']]
+            sense, sense_c = self.non_explicit_clf.get_sense(ptree_prev, ptree, dtree_prev, dtree, arg1, arg2)
+            relation['Sense'] = [sense]
+            relation['Confidences']['Sense'] = sense_c
             output.append(relation)
 
             token_id += len(sent['words'])

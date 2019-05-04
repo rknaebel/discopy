@@ -113,16 +113,16 @@ def generate_pdtb_features(pdtb, parses):
 class ArgumentExtractClassifier:
     def __init__(self):
         self.ss_model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
             ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
             ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial',
-                                                              n_jobs=-1, max_iter=150))
+                                                              n_jobs=-1, max_iter=200))
         ])
         self.ps_model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
             ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
             ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial',
-                                                              n_jobs=-1, max_iter=150))
+                                                              n_jobs=-1, max_iter=200))
         ])
 
     def load(self, path):
@@ -137,6 +137,8 @@ class ArgumentExtractClassifier:
         (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(pdtb, parses)
         self.ss_model.fit(X_ss, y_ss)
         self.ps_model.fit(X_ps, y_ps)
+        print("Acc:", self.ss_model.score(X_ss, y_ss))
+        print("Acc:", self.ps_model.score(X_ps, y_ps))
 
     def extract_arguments(self, ptree, relation):
         indices = [token[4] for token in relation['Connective']['TokenList']]

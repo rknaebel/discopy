@@ -10,6 +10,8 @@ from nltk.tree import ParentedTree
 import discopy.conn_head_mapper
 from discopy.features import get_connective_sentence_position, lca, get_pos_features
 
+lemmatizer = nltk.stem.WordNetLemmatizer()
+
 
 def get_features(ptree: ParentedTree, connective: str, leaf_index: list):
     chm = discopy.conn_head_mapper.ConnHeadMapper()
@@ -22,6 +24,9 @@ def get_features(ptree: ParentedTree, connective: str, leaf_index: list):
 
     prev, prev_conn, prev_pos, prev_pos_conn_pos = get_pos_features(ptree, leaf_index, head, -1)
     prev2, prev2_conn, prev2_pos, prev2_pos_conn_pos = get_pos_features(ptree, leaf_index, head, -2)
+
+    prev = lemmatizer.lemmatize(prev)
+    prev2 = lemmatizer.lemmatize(prev2)
 
     feat = {'connective': head, 'connectivePOS': conn_tag, 'cPosition': conn_pos_relative, 'prevWord+c': prev_conn,
             'prevPOSTag': prev_pos, 'prevPOS+cPOS': prev_pos_conn_pos, 'prevWord': prev, 'prev2Word+c': prev2_conn,
@@ -59,9 +64,9 @@ def generate_pdtb_features(pdtb, parses):
 class ArgumentPositionClassifier:
     def __init__(self):
         self.model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer(sparse=False)),
+            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
             ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs'))
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', max_iter=200))
         ])
 
     def load(self, path):
@@ -73,6 +78,7 @@ class ArgumentPositionClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
+        print("Acc:", self.model.score(X, y))
 
     def get_argument_position(self, parse, connective: str, leaf_index):
         x = get_features(parse, connective, leaf_index)

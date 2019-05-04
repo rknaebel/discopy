@@ -30,7 +30,7 @@ def main():
     if args.mode == 'train':
         pdtb = [json.loads(s) for s in open(args.pdtb, 'r').readlines()]
         parses = json.loads(open(args.parses).read())
-        parser.train(pdtb, parses, epochs=args.epochs)
+        parser.train(pdtb, parses)
         parser.save(args.dir)
     elif args.mode == 'run':
         parser.load(args.dir)
