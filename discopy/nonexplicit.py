@@ -4,6 +4,7 @@ import sys
 import pickle
 import random
 import math
+import multiprocessing
 from collections import Counter, defaultdict
 
 import nltk
@@ -16,12 +17,12 @@ class FeatureIterator(object):
     def __init__(self, pdtb, parses):
         self.pdtb = pdtb
         self.parses = parses
-        self.pos = -1
-        self.spos = 0
+        self.pos = 0
+        self.spos = -1
 
     def ignore(self, sense, relation):
         sl_sense = self.get_second_level_sense(sense)
-        return relation['Type'] != 'Implicit' or self.ignore_nonexp_relation(sl_sense)
+        return relation['Type'] not in ['Implicit'] or self.ignore_nonexp_relation(sl_sense)
 
     # Extracts the second PDTB level of a sense
     @staticmethod
@@ -52,9 +53,20 @@ class FeatureIterator(object):
         return self.next()
 
     def next(self):
-        self.pos += 1
+        if not self.ignore(self.pdtb[self.pos]['Sense'][self.spos], self.pdtb[self.pos]):
+            if self.spos+1 < len(self.pdtb[self.pos]['Sense']):
+                self.spos += 1
+            else:
+                self.pos += 1
+                self.spos = 0
+
         while self.pos < len(self.pdtb) and self.ignore(self.pdtb[self.pos]['Sense'][self.spos], self.pdtb[self.pos]):
-            self.pos += 1
+            if self.spos+1 < len(self.pdtb[self.pos]['Sense']):
+               self.spos += 1
+            else:
+                self.pos += 1
+                self.spos = 0
+
         if self.pos < len(self.pdtb):
             return self.pdtb[self.pos]
         raise StopIteration()
@@ -290,8 +302,9 @@ class WordPairFeature(Feature):
 class NonExplicitSenseClassifier(object):
     def __init__(self, debug=False):
         self.model = None
-        self.prod_rules = set()
-        self.dep_rules = set()
+        self.feat_productions = set()
+        self.feat_dependency_rules = set()
+        self.feat_wordpairs = set()
         self.DEBUG = debug
     
     def get_features(self, parse_trees, deps, all_productions, all_dep_rules):
@@ -306,11 +319,19 @@ class NonExplicitSenseClassifier(object):
 
         return feat
 
-    def read_reference_file(self, fname):
-        return [r.split()[0].replace('_', ' ') for r in open(fname).readlines()]
+    def select_by_mutual_information_mp(self, rels, senses, feats, has_args, num_select):
+        num_procs = 8
+
+        split_rels = []
+        for i in range(num_procs):
+            split_rels.append(rels[i, i+(len(rels)/num_procs)])
+
+        p = multiprocessing.Pool(num_procs)
+        # TODO: implement multiprocessing
+        result = p.map(Simulation,range(10))
 
     # https://nlp.stanford.edu/IR-book/html/htmledition/mutual-information-1.html
-    def select_by_mutual_information(self, rels, senses, feats, num_select):
+    def select_by_mutual_information(self, rels, senses, feats, has_args, num_select):
         classes = set(senses)
 
         if self.DEBUG:
@@ -318,38 +339,41 @@ class NonExplicitSenseClassifier(object):
             print(' -> ' + str(len(classes)) + ' classes')
             print(' -> ' + str(len(feats)) + ' features')
 
+        set_feats = set(feats)
         d = defaultdict(int)
         n_all = 0
         lst = []
         for i, (f, s) in enumerate(zip(rels, senses)):
-            for r in f:
-                for a in r:
-                    if a in feats:
-                        lst.append((a, s))
-                        n_all += 1
+            if has_args:
+                for r in f:
+                    for a in r:
+                        if a in feats:
+                            lst.append((a, s))
+                            n_all += 1
+            else:
+                ns = set_feats.intersection(f)
+                for a in ns:
+                    lst.append((a, s))
+                    n_all += 1
 
         cnt_11 = Counter(lst)
         cnt__1 = Counter(s for f, s in lst)
         cnt_1_ = Counter(f for f, s in lst)
 
+        
         mis = {} 
         for i, f in enumerate(feats):
             tmp = []
             for cl in classes:
                 #n_<feat><class>
                 n_11 = cnt_11[(f, cl)]
-                if n_11 <= 0:
-                    continue
                 n_01 = cnt__1[cl] - n_11
-                if n_01 <= 0:
-                    continue
                 n_10 = cnt_1_[f] - n_11
-                if n_10 <= 0:
-                    continue
                 n_00 = n_all - n_11 - n_01 - n_10
-                if n_00 <= 0:
-                    continue
                 n = float(n_11 + n_00 + n_01 + n_10)
+
+                if n_11 <= 0 or n_01 <= 0 or n_10 <= 0 or n_00 <= 0:
+                    continue
 
                 n_0_ = float(n_00 + n_01)
                 n__0 = float(n_00 + n_10)
@@ -370,15 +394,7 @@ class NonExplicitSenseClassifier(object):
 
         return [f for mi, f in mis][:num_select], dict((f, mi) for mi, f in mis[:num_select])
 
-    # generates the featureset used to train a classifier
-    #
-    # features are: Production Rules,
-    #               Dependency Rules,
-    #               Wordpairs,
-    #               Contextual Features
-    #
-    def generate_pdtb_features(self, pdtb, parses):
-
+    def train_pdtb_features(self, pdtb, parses):
         extracted_productions = list(ProductionRuleFeature(pdtb, parses))
         extracted_dependency_rules = list(DependencyRuleFeature(pdtb, parses))
         extracted_context_features = list(ContextFeature(pdtb, parses))
@@ -399,20 +415,38 @@ class NonExplicitSenseClassifier(object):
 
         if self.DEBUG:
             # info about the # of features. second row is # as it should be from the paper
-            print('  ==> Extracted Rules')
+            print('  ==> Training PDTB features')
             print('\t#Production Rules:\t', len(all_productions))
             print('\t#Dependency Rules:\t', len(all_dependency_rules))
             print('\t#Word Pairs:\t\t', len(all_wordpairs))
 
-        all_productions_ref = set(self.read_reference_file('data/prod_rules.txt'))
-        all_productions, _ = set(self.select_by_mutual_information(extracted_productions, extracted_senses, all_productions, 100))
+        all_productions, _ = self.select_by_mutual_information(extracted_productions, extracted_senses, all_productions, True, 100)
+        all_dependency_rules, _ = self.select_by_mutual_information(extracted_dependency_rules, extracted_senses, all_dependency_rules, True, 100)
+        all_wordpairs, _ = self.select_by_mutual_information(extracted_wordpairs, extracted_senses, all_wordpairs, False, 500)
 
-        print('--' * 20 + 'INTERSECTION' + '--' * 20)
-        print(all_productions_ref & all_productions)
-        print('--' * 20 + 'DIFFERENCE' + '--' * 20)
-        print(all_productions - all_productions_ref)
+        self.feat_productions = all_productions
+        self.feat_dependency_rules = all_dependency_rules
+        self.feat_wordpairs = all_wordpairs
+        
+        if self.DEBUG:
+            self.print_reference_overlap('data')
 
 
+    # generates the featureset used to train a classifier
+    #
+    # features are: Production Rules,
+    #               Dependency Rules,
+    #               Wordpairs,
+    #               Contextual Features
+    #
+    def generate_pdtb_features(self, pdtb, parses):
+        extracted_productions = list(ProductionRuleFeature(pdtb, parses))
+        extracted_dependency_rules = list(DependencyRuleFeature(pdtb, parses))
+        extracted_context_features = list(ContextFeature(pdtb, parses))
+        extracted_wordpairs = list(WordPairFeature(pdtb, parses))
+        extracted_senses = list(SenseIterator(pdtb, parses))
+
+        print('Length', len(pdtb), len(extracted_senses))
         feature_set = []
         for (p_arg1, p_arg2), (d_arg1, d_arg2), c_feats, word_pairs, sense in zip(extracted_productions, 
                                                                                   extracted_dependency_rules, 
@@ -420,33 +454,48 @@ class NonExplicitSenseClassifier(object):
                                                                                   extracted_wordpairs,
                                                                                   extracted_senses):
             feat = {}
-            for p in all_productions:
+            for p in self.feat_productions:
                 feat[p + ':1' ] = str(p in p_arg1)
                 feat[p + ':2' ] = str(p in p_arg2)
                 feat[p + ':12'] = str(p in p_arg1 and p in p_arg2)
-            #for r in all_dependency_rules[:100]:
+            #for r in self.feat_dependency_rules:
             #    feat[r + ':1' ] = str(r in d_arg1)
             #    feat[r + ':2' ] = str(r in d_arg2)
             #    feat[r + ':12'] = str(r in d_arg1 and r in d_arg2)
-            #for wp in all_wordpairs[:500]:
+            #for wp in self.feat_wordpairs:
             #    feat[wp] = str(wp in word_pairs)
 
             #feat.update(c_feats)
             feature_set.append((feat, sense))
 
-        return all_productions, all_dependency_rules, feature_set
+        return feature_set
 
     # loads the model from disk
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'non_explicit_clf.p'), 'rb'))
-        self.prod_rules = pickle.load(open(os.path.join(path, 'non_explicit_prod_rules.p'), 'rb'))
-        self.dep_rules = pickle.load(open(os.path.join(path, 'non_explicit_dep_rules.p'), 'rb'))
+        self.feat_productions = pickle.load(open(os.path.join(path, 'non_explicit_prod_rules.p'), 'rb'))
+        self.feat_dependency_rules = pickle.load(open(os.path.join(path, 'non_explicit_dep_rules.p'), 'rb'))
+        self.feat_wordpairs = pickle.load(open(os.path.join(path, 'non_explicit_wordpairs.p'), 'rb'))
 
     # save the model to disk
     def save(self, path):
         pickle.dump(self.model, open(os.path.join(path, 'non_explicit_clf.p'), 'wb'))
-        pickle.dump(self.prod_rules, open(os.path.join(path, 'non_explicit_prod_rules.p'), 'wb'))
-        pickle.dump(self.dep_rules, open(os.path.join(path, 'non_explicit_dep_rules.p'), 'wb'))
+        pickle.dump(self.feat_productions, open(os.path.join(path, 'non_explicit_prod_rules.p'), 'wb'))
+        pickle.dump(self.feat_dependency_rules, open(os.path.join(path, 'non_explicit_dep_rules.p'), 'wb'))
+        pickle.dump(self.feat_wordpairs, open(os.path.join(path, 'non_explicit_wordpairs.p'), 'wb'))
+
+    def read_reference_file(self, fname):
+        return {r.split()[0].replace('_', ' ') for r in open(fname).readlines()}
+
+    def print_reference_overlap(self, path):
+        print('  ==> Overlap of features with reference (Lin et al.)')
+        ref_prod_rules = self.read_reference_file(os.path.join(path, 'prod_rules.ref'))
+        ref_dep_rules = self.read_reference_file(os.path.join(path, 'dep_rules.ref'))
+        ref_wordpairs = set(wp.replace(' ', '_') for wp in self.read_reference_file(os.path.join(path, 'word_pair.ref')))
+        
+        print('\tProduction:', 100 * (len(set(self.feat_productions).intersection(ref_prod_rules)) / len(self.feat_productions)), '%')
+        print('\tDependency:', 100 * (len(set(self.feat_dependency_rules).intersection(ref_dep_rules)) / len(self.feat_dependency_rules)), '%')
+        print('\tWordpairs: ', 100 * (len(set(self.feat_wordpairs).intersection(ref_wordpairs)) / len(self.feat_wordpairs)), '%')
 
     def fit(self, pdtb, parses, max_iter=5):
         self.prod_rules, self.dep_rules, features = generate_pdtb_features(pdtb, parses)
@@ -472,36 +521,46 @@ if __name__ == "__main__":
         print('Usage: python ' + sys.argv[0] + ' <PATH_CONLL_DIR>')
     else:
         CONLL_DIR = sys.argv[1]
-        print('Loading data..')
+        print('  ==> Loading data..')
         print('\tTraining data')
         trainpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.train/relations.json'), 'r').readlines()]
         trainparses = json.loads(open(os.path.join(CONLL_DIR, 'en.train/parses.json')).read())
+
         print('\tDevelopment data')
-        devpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.dev/nonexplicits_only_gold.json'), 'r').readlines()]
+        devpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.dev/relations.json'), 'r').readlines()]
         devparses = json.loads(open(os.path.join(CONLL_DIR, 'en.dev/parses.json')).read())
 
         print('\tTesting data')
-        testpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.test/nonexplicits_only_gold.json'), 'r').readlines()]
+        testpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.test/relations.json'), 'r').readlines()]
         testparses = json.loads(open(os.path.join(CONLL_DIR, 'en.test/parses.json')).read())
+
+        print('\tBlind testing data')
+        blindpdtb = [json.loads(s) for s in open(os.path.join(CONLL_DIR, 'en.blind-test/relations.json'), 'r').readlines()]
+        blindparses = json.loads(open(os.path.join(CONLL_DIR, 'en.blind-test/parses.json')).read())
+
 
         clf = NonExplicitSenseClassifier(debug=True)
         clf.print_baseline(testpdtb, testparses)
+        clf.train_pdtb_features(trainpdtb, trainparses)
 
-        all_productions, all_dep_rules, train_data = clf.generate_pdtb_features(trainpdtb, trainparses)
-        #all_productions, all_dep_rules, train_data = clf.generate_pdtb_features(devpdtb, devparses)
-        clf.prod_rules = all_productions
-        clf.dep_rules = all_dep_rules
+        train_data = clf.generate_pdtb_features(trainpdtb, trainparses)
+        #train_data = clf.generate_pdtb_features(devpdtb, devparses)
         clf.fit_on_features(train_data, max_iter=100)
         print('  ==> Most informative features')
         clf.model.show_most_informative_features()
         clf.save('/tmp')
+
         print('....................................................................ON TRAINING DATA..................')
         print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, train_data)))
 
         print('....................................................................ON DEVELOPMENT DATA..................')
-        _, _, val_data = clf.generate_pdtb_features(devpdtb, devparses)
+        val_data = clf.generate_pdtb_features(devpdtb, devparses)
         print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, val_data)))
 
         print('....................................................................ON TEST DATA..................')
-        _, _, test_data = clf.generate_pdtb_features(testpdtb, testparses)
+        test_data = clf.generate_pdtb_features(testpdtb, testparses)
         print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, test_data)))
+
+        print('....................................................................ON BLIND-TEST DATA..................')
+        blind_data = clf.generate_pdtb_features(blindpdtb, blindparses)
+        print('ACCURACY {}'.format(nltk.classify.accuracy(clf.model, blind_data)))

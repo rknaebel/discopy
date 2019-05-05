@@ -22,7 +22,7 @@ class TestNonexplicit(unittest.TestCase):
         rels = [[[a]] for (a, b) in n]
         senses = [b for (a, b) in n]
 
-        _, mis = clf.select_by_mutual_information(rels, senses, terms, 2)
+        _, mis = clf.select_by_mutual_information(rels, senses, terms, False, 2)
         self.assertEqual(mis['export'], 0.00011053558610110263)
 
     def test_production_rules(self):

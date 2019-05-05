@@ -163,7 +163,6 @@ fabric.properties
 *.hdf5
 *.ipynb
 inputs/*
-data/*
 results/*
 .ipynv_checkpoints/*
 .idea/*
