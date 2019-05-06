@@ -6,7 +6,11 @@ from collections import defaultdict
 
 import nltk
 import sklearn
-import sklearn.pipeline
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_selection import SelectKBest, mutual_info_classif, VarianceThreshold
+from sklearn.pipeline import Pipeline, FeatureUnion
+
+from discopy.utils import ItemSelector
 
 logger = logging.getLogger('discopy')
 
@@ -38,29 +42,33 @@ def get_features(ptrees_prev, ptrees, dtrees_prev, dtrees, arg1, arg2):
     productions_prev = set(extract_productions(ptrees_prev))
     productions = set(extract_productions(ptrees))
 
-    features = {}
+    features = {
+        'prod': {},
+        'deps': {},
+        'word_pairs': {}
+    }
     for r in productions | productions_prev:
         if r in productions_prev and r in productions:
-            features[r] = 3
+            features['prod'][r] = 'both'
         elif r in productions_prev:
-            features[r] = 1
+            features['prod'][r] = 'arg1'
         elif r in productions:
-            features[r] = 2
+            features['prod'][r] = 'arg2'
 
     deps_prev = set(extract_dependencies(dtrees_prev))
     deps = set(extract_dependencies(dtrees))
 
     for d in deps | deps_prev:
         if d in deps_prev and d in deps:
-            features[d] = 3
+            features['deps'][d] = 'both'
         elif d in deps_prev:
-            features[d] = 1
+            features['deps'][d] = 'arg1'
         elif d in deps:
-            features[d] = 2
+            features['deps'][d] = 'arg2'
 
     for w1 in arg1:
         for w2 in arg2:
-            features["({},{})".format(stemmer.stem(w1), stemmer.stem(w2))] = 1
+            features['word_pairs']["({},{})".format(stemmer.stem(w1), stemmer.stem(w2))] = 1
 
     return features
 
@@ -92,9 +100,27 @@ def generate_pdtb_features(pdtb, parses):
 
 class NonExplicitSenseClassifier:
     def __init__(self):
-        self.model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
-            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=500)),
+        self.model = Pipeline([
+            ('union', FeatureUnion([
+                ('productions', Pipeline([
+                    ('selector', ItemSelector(key='prod')),
+                    ('vectorizer', DictVectorizer()),
+                    ('variance', VarianceThreshold(threshold=0.001)),
+                    ('reduce', SelectKBest(mutual_info_classif, k=100))
+                ])),
+                ('dependecies', Pipeline([
+                    ('selector', ItemSelector(key='deps')),
+                    ('vectorizer', DictVectorizer()),
+                    ('variance', VarianceThreshold(threshold=0.001)),
+                    ('reduce', SelectKBest(mutual_info_classif, k=100))
+                ])),
+                ('word_pairs', Pipeline([
+                    ('selector', ItemSelector(key='word_pairs')),
+                    ('vectorizer', DictVectorizer()),
+                    ('variance', VarianceThreshold(threshold=0.005)),
+                    ('reduce', SelectKBest(mutual_info_classif, k=500))
+                ]))
+            ])),
             ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1,
                                                               max_iter=200))
         ])
@@ -120,16 +146,17 @@ if __name__ == "__main__":
     pdtb_train = [json.loads(s) for s in
                   open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
     parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.test/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('../../discourse/data/conll2016/en.test/parses.json').read())
 
-    print('....................................................................TRAINING..................')
     clf = NonExplicitSenseClassifier()
+    print("generate features")
     X, y = generate_pdtb_features(pdtb_train, parses_train)
+    print('train model')
     clf.model.fit(X, y)
-    print('....................................................................ON TRAINING DATA..................')
+    print('Evaluation on TRAIN')
     print('ACCURACY {}'.format(clf.model.score(X, y)))
-    print('....................................................................ON DEVELOPMENT DATA..................')
+    print('Evaluation on TEST')
     X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
     print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
     clf.save('../tmp')
