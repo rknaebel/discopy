@@ -1,5 +1,6 @@
 import codecs
 import json
+import logging
 import os
 
 import nltk
@@ -10,6 +11,8 @@ from discopy.argument_position import ArgumentPositionClassifier
 from discopy.connective import ConnectiveClassifier
 from discopy.explicit import ExplicitSenseClassifier
 from discopy.nonexplicit import NonExplicitSenseClassifier
+
+logger = logging.getLogger('discopy')
 
 
 def get_token_list(doc_words, tokens, sent_id, sent_off):
@@ -32,20 +35,20 @@ class DiscourseParser(object):
         self.non_explicit_clf = NonExplicitSenseClassifier()
 
     def train(self, pdtb, parses):
-        print('Train Connective Classifier...')
+        logger.info('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
-        print('Train ArgPosition Classifier...')
+        logger.info('Train ArgPosition Classifier...')
         self.arg_pos_clf.fit(pdtb, parses)
-        print('Train Argument Extractor...')
+        logger.info('Train Argument Extractor...')
         self.arg_extract_clf.fit(pdtb, parses)
-        print('Train Explicit Sense Classifier...')
+        logger.info('Train Explicit Sense Classifier...')
         self.explicit_clf.fit(pdtb, parses)
-        print('Train Non-Explicit Sense Classifier...')
+        logger.info('Train Non-Explicit Sense Classifier...')
         self.non_explicit_clf.fit(pdtb, parses)
 
     def save(self, path):
         if not os.path.exists(path):
-            os.mkdir(path)
+            os.makedirs(path)
         self.connective_clf.save(path)
         self.arg_pos_clf.save(path)
         self.arg_extract_clf.save(path)
@@ -81,11 +84,11 @@ class DiscourseParser(object):
             try:
                 ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
             except ValueError:
-                print('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
+                logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
                 token_id += sent_len
                 continue
             if not ptree.leaves():
-                print('Failed on empty tree')
+                logger.warning('Failed on empty tree')
                 token_id += sent_len
                 continue
             current_token = 0
@@ -147,6 +150,7 @@ class DiscourseParser(object):
                     relation['Confidences']['Arg1'] = arg1_c
                     relation['Confidences']['Arg2'] = arg2_c
                 else:
+                    logger.error('Unknown Argument Position: ' + arg_pos)
                     raise ValueError('Unknown Argument Position')
 
                 # EXPLICIT SENSE
@@ -172,7 +176,7 @@ class DiscourseParser(object):
                 dtree = sent['dependencies']
                 dtree_prev = doc['sentences'][sent_id - 1]['dependencies']
             except ValueError:
-                print('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
+                logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
                 continue
 
             if not ptree.leaves() or not ptree_prev.leaves():

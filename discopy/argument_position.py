@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import ujson as json
@@ -9,6 +10,8 @@ from nltk.tree import ParentedTree
 
 import discopy.conn_head_mapper
 from discopy.features import get_connective_sentence_position, lca, get_pos_features
+
+logger = logging.getLogger('discopy')
 
 lemmatizer = nltk.stem.WordNetLemmatizer()
 
@@ -66,7 +69,7 @@ class ArgumentPositionClassifier:
         self.model = sklearn.pipeline.Pipeline([
             ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
             ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', max_iter=200))
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', max_iter=200, n_jobs=-1))
         ])
 
     def load(self, path):
@@ -78,7 +81,7 @@ class ArgumentPositionClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        print("Acc:", self.model.score(X, y))
+        logger.info("Acc: {}".format(self.model.score(X, y)))
 
     def get_argument_position(self, parse, connective: str, leaf_index):
         x = get_features(parse, connective, leaf_index)

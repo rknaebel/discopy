@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import ujson as json
@@ -6,6 +7,8 @@ from collections import defaultdict
 import nltk
 import sklearn
 import sklearn.pipeline
+
+logger = logging.getLogger('discopy')
 
 lemmatizer = nltk.stem.WordNetLemmatizer()
 stemmer = nltk.stem.SnowballStemmer('english')
@@ -105,7 +108,7 @@ class NonExplicitSenseClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        print("Acc:", self.model.score(X, y))
+        logger.info("Acc: {}".format(self.model.score(X, y)))
 
     def get_sense(self, sents_prev, sents, dtree_prev, dtree, arg1, arg2):
         x = get_features([sents_prev], [sents], [dtree_prev], [dtree], arg1, arg2)

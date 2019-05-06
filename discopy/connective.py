@@ -12,7 +12,7 @@ from typing import Dict, List
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discopy')
 
 lemmatizer = nltk.stem.WordNetLemmatizer()
 
@@ -170,7 +170,7 @@ class ConnectiveClassifier:
         self.model = sklearn.pipeline.Pipeline([
             ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
             ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', max_iter=200))
+            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', max_iter=200, n_jobs=-1))
         ])
 
     def load(self, path):
@@ -182,7 +182,7 @@ class ConnectiveClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        logging.info("Acc:", self.model.score(X, y))
+        logger.info("Acc: {}".format(self.model.score(X, y)))
 
     def get_connective(self, parsetree, sentence, word_idx) -> (List[str], float):
         candidate = match_connectives(sentence, word_idx)

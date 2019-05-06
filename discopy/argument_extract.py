@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import ujson as json
@@ -11,6 +12,8 @@ from discopy.features import get_clause_context, get_connective_category, get_re
     get_clause_direction_path, lca, get_index_tree
 from discopy.features import get_root_path
 from discopy.features import get_sibling_counts, get_clauses
+
+logger = logging.getLogger('discopy')
 
 
 def get_features(clauses, conn_head, indices, ptree):
@@ -137,8 +140,8 @@ class ArgumentExtractClassifier:
         (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(pdtb, parses)
         self.ss_model.fit(X_ss, y_ss)
         self.ps_model.fit(X_ps, y_ps)
-        print("Acc:", self.ss_model.score(X_ss, y_ss))
-        print("Acc:", self.ps_model.score(X_ps, y_ps))
+        logger.info("SS Acc: {}".format(self.ss_model.score(X_ss, y_ss)))
+        logger.info("PS Acc: {}".format(self.ps_model.score(X_ps, y_ps)))
 
     def extract_arguments(self, ptree, relation):
         indices = [token[4] for token in relation['Connective']['TokenList']]

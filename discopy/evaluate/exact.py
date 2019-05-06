@@ -1,15 +1,19 @@
+import logging
+
 import numpy as np
+
+logger = logging.getLogger('discopy')
 
 
 def print_results(results, mode):
-    print('================================================')
-    print('Evaluation for {} discourse relations:'.format(mode))
-    print('================================================')
-    print('Conn extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[0])))
-    print('Arg1 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[1])))
-    print('Arg2 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[2])))
-    print('Concat(Arg1, Arg2) extractor: P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[3])))
-    print('Sense:                        P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[4])))
+    logger.info('================================================')
+    logger.info('Evaluation for {} discourse relations:'.format(mode))
+    logger.info('================================================')
+    logger.info('Conn extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[0])))
+    logger.info('Arg1 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[1])))
+    logger.info('Arg2 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[2])))
+    logger.info('Concat(Arg1, Arg2) extractor: P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[3])))
+    logger.info('Sense:                        P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[4])))
 
 
 def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9):

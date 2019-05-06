@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import pickle
 
@@ -8,6 +9,8 @@ import sklearn.pipeline
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_connective_sentence_position, lca
+
+logger = logging.getLogger('discopy')
 
 lemmatizer = nltk.stem.WordNetLemmatizer()
 
@@ -70,7 +73,7 @@ class ExplicitSenseClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        print("Acc:", self.model.score(X, y))
+        logger.info("Acc: {}".format(self.model.score(X, y)))
 
     def get_sense(self, relation, ptree):
         x = get_features(relation, ptree)

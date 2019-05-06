@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 
 import argparse
 
@@ -22,6 +24,24 @@ argument_parser.add_argument("--out", help="",
 argument_parser.add_argument("--eval-threshold", help="",
                              default=0.9, type=float)
 args = argument_parser.parse_args()
+
+os.makedirs(args.dir, exist_ok=True)
+
+logger = logging.getLogger('discopy')
+logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler(os.path.join(args.dir, 'main.log'), mode='a')
+# create file handler which logs even debug messages
+fh.setLevel(logging.DEBUG)
+# create console handler
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+# create formatter and add it to the handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+ch.setFormatter(formatter)
+# add the handlers to the logger
+logger.addHandler(fh)
+logger.addHandler(ch)
 
 
 def main():
