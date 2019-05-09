@@ -1,9 +1,14 @@
 #
 # argument extractor
 #
-from collections import defaultdict
+import copy
+import logging
+from collections import defaultdict, Counter
 
 from sklearn.base import BaseEstimator, TransformerMixin
+
+logger = logging.getLogger('discopy')
+
 
 discourse_adverbial = {'accordingly', 'additionally', 'afterwards', 'also', 'alternatively', 'as a result',
                        'as an alternative', 'as well', 'besides', 'by comparison', 'by contrast',
@@ -218,3 +223,39 @@ class ItemSelector(BaseEstimator, TransformerMixin):
 
     def transform(self, data_items):
         return [item[self.key] for item in data_items]
+
+
+def preprocess_relations(pdtb, level=2):
+    pdtb = copy.deepcopy(pdtb)
+    for r in pdtb:
+        sense = []
+        for s in r['Sense']:
+            sense.append('.'.join(s.split('.')[:level]))
+        r['Sense'] = sense
+    n_senses = Counter(s for r in pdtb for s in r['Sense'])
+    limit = len(pdtb) // (len(n_senses) * 2)
+    pdtb = [r for r in pdtb if n_senses.get(r['Sense'][0], 0) > limit]
+    logger.info("Preprocessed PDTB relations left: {}".format(len(pdtb)))
+    return pdtb
+
+
+def init_logger(path):
+    logger = logging.getLogger('discopy')
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler(path, mode='a')
+    # create file handler which logs even debug messages
+    fh.setLevel(logging.DEBUG)
+    # create console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%y-%b-%d %H:%M:%S')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    # add the handlers to the logger
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+    logger.info('=' * 50)
+    logger.info('@  NEW RUN')
+    logger.info('=' * 50)
+    return logger

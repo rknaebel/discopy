@@ -4,11 +4,14 @@ import os
 import pickle
 
 import nltk
-import sklearn
-import sklearn.pipeline
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_selection import SelectKBest, chi2
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_connective_sentence_position, lca
+from discopy.utils import preprocess_relations
 
 logger = logging.getLogger('discopy')
 
@@ -41,7 +44,8 @@ def get_features(relation, ptree):
 
 def generate_pdtb_features(pdtb, parses):
     features = []
-    for relation in filter(lambda i: i['Type'] == 'Explicit', pdtb):
+    pdtb = preprocess_relations(list(filter(lambda i: i['Type'] == 'Explicit', pdtb)))
+    for relation in pdtb:
         sentenceOffSet = relation['Connective']['TokenList'][0][3]
         doc = relation['DocID']
         sense = relation['Sense'][0]

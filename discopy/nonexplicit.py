@@ -10,7 +10,7 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, VarianceThreshold
 from sklearn.pipeline import Pipeline, FeatureUnion
 
-from discopy.utils import ItemSelector
+from discopy.utils import ItemSelector, preprocess_relations
 
 logger = logging.getLogger('discopy')
 
@@ -75,7 +75,8 @@ def get_features(ptrees_prev, ptrees, dtrees_prev, dtrees, arg1, arg2):
 
 def generate_pdtb_features(pdtb, parses):
     features = []
-    for relation in filter(lambda i: i['Type'] != 'Explicit', pdtb):
+    pdtb = preprocess_relations(list(filter(lambda i: i['Type'] != 'Explicit', pdtb)))
+    for relation in pdtb:
         arg1_sentence_ids = {t[3] for t in relation['Arg1']['TokenList']}
         arg2_sentence_ids = {t[3] for t in relation['Arg2']['TokenList']}
         doc = relation['DocID']
