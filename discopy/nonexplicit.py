@@ -93,7 +93,7 @@ def generate_pdtb_features(pdtb, parses):
             continue
         arg1 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg1']['TokenList']]
         arg2 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg2']['TokenList']]
-        sense = relation['Sense'][0]
+        sense = "{}--{}".format(relation['Type'], relation['Sense'][0])
         features.append(
             (get_features(arg1_parse_trees, arg2_parse_trees, arg1_dep_trees, arg2_dep_trees, arg1, arg2), sense))
 
@@ -151,7 +151,8 @@ class NonExplicitSenseClassifier:
     def get_sense(self, sents_prev, sents, dtree_prev, dtree, arg1, arg2):
         x = get_features([sents_prev], [sents], [dtree_prev], [dtree], arg1, arg2)
         probs = self.model.predict_proba([x])[0]
-        return self.model.classes_[probs.argmax()], probs.max()
+        r_type, r_sense = self.model.classes_[probs.argmax()].split('--')
+        return r_sense, probs.max()
 
 
 if __name__ == "__main__":

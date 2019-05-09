@@ -1,5 +1,4 @@
 import logging
-import logging
 import os
 import pickle
 import ujson as json
@@ -53,9 +52,9 @@ def extract_ss_arguments(clauses, conn_head, indices, ptree, arg1, arg2):
     clause_features = get_features(clauses, conn_head, indices, ptree)
     for feature, clause in clause_features:
         clause_indices = set(ptree_ids[clause].leaves())
-        if clause_indices.issubset(arg1):
+        if clause_indices.issubset(arg1) and abs(len(arg1) - len(clause_indices)) <= 3:
             label = 'Arg1'
-        elif clause_indices.issubset(arg2):
+        elif clause_indices.issubset(arg2) and abs(len(arg2) - len(clause_indices)) <= 3:
             label = 'Arg2'
         else:
             label = 'NULL'
@@ -73,7 +72,7 @@ def extract_ps_arguments(clauses, conn_head, indices, ptree, arg2):
     clause_features = get_features(clauses, conn_head, indices, ptree)
     for feature, clause in clause_features:
         clause_indices = set(ptree_ids[clause].leaves())
-        if clause_indices.issubset(arg2):
+        if clause_indices.issubset(arg2) and abs(len(arg2) - len(clause_indices)) <= 3:
             label = 'Arg2'
         else:
             label = 'NULL'
@@ -178,9 +177,8 @@ class ArgumentExtractClassifier:
         X = [i[0] for i in get_features(clauses, conn_head, indices, ptree)]
         if relation['ArgPos'] == 'SS':
             probs = self.ss_model.predict_proba(X)
-            _, arg1_max_idx, arg2_max_idx = probs.argmax(axis=0)
-            _, arg1_prob, arg2_prob = probs.max(axis=0)
-
+            arg1_max_idx, arg2_max_idx, _ = probs.argmax(axis=0)
+            arg1_prob, arg2_prob, _ = probs.max(axis=0)
             arg1 = set(ptree_ids[clauses[arg1_max_idx][1]].leaves())
             arg2 = set(ptree_ids[clauses[arg2_max_idx][1]].leaves())
             if arg1.issubset(arg2):
@@ -189,8 +187,8 @@ class ArgumentExtractClassifier:
                 arg1 = arg1 - arg2
         elif relation['ArgPos'] == 'PS':
             probs = self.ps_model.predict_proba(X)
-            _, arg2_max_idx = probs.argmax(axis=0)
-            _, arg2_prob = probs.max(axis=0)
+            arg2_max_idx, _ = probs.argmax(axis=0)
+            arg2_prob, _ = probs.max(axis=0)
             arg1_prob = 1.0
 
             arg1 = set()
