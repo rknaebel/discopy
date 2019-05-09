@@ -6,7 +6,8 @@ import pickle
 import nltk
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, chi2
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline
 
 from discopy.conn_head_mapper import ConnHeadMapper
@@ -61,11 +62,12 @@ def generate_pdtb_features(pdtb, parses):
 
 class ExplicitSenseClassifier:
     def __init__(self):
-        self.model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
-            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1,
-                                                              max_iter=200))
+        self.model = Pipeline([
+            ('vectorizer', DictVectorizer()),
+            ('selector', SelectKBest(chi2, k=100)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
         ])
 
     def load(self, path):
@@ -77,7 +79,16 @@ class ExplicitSenseClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        logger.info("Acc: {}".format(self.model.score(X, y)))
+
+    def score(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        y_pred = self.model.predict_proba(X)
+        y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
+        logger.info("Evaluation: Sense(explicit)")
+        logger.info("- Acc: {}".format(accuracy_score(y, y_pred_c)))
+        prec, recall, f1, support = precision_recall_fscore_support(y, y_pred_c, average='macro')
+        logger.info("- Macro PRF: {} {} {}".format(prec, recall, f1))
+        logger.info("- Kappa: {}".format(cohen_kappa_score(y, y_pred_c)))
 
     def get_sense(self, relation, ptree):
         x = get_features(relation, ptree)

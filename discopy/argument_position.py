@@ -4,9 +4,12 @@ import pickle
 import ujson as json
 
 import nltk
-import sklearn
-import sklearn.pipeline
 from nltk.tree import ParentedTree
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score, cohen_kappa_score
+from sklearn.pipeline import Pipeline
 
 import discopy.conn_head_mapper
 from discopy.features import get_connective_sentence_position, lca, get_pos_features
@@ -66,10 +69,13 @@ def generate_pdtb_features(pdtb, parses):
 
 class ArgumentPositionClassifier:
     def __init__(self):
-        self.model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
-            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', max_iter=200, n_jobs=-1))
+        self.model = Pipeline([
+            ('vectorizer', DictVectorizer()),
+            ('variance', VarianceThreshold(threshold=0.001)),
+            ('selector', SelectKBest(chi2, k=100)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
         ])
 
     def load(self, path):
@@ -81,7 +87,16 @@ class ArgumentPositionClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        logger.info("Acc: {}".format(self.model.score(X, y)))
+
+    def score(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        y_pred = self.model.predict_proba(X)
+        y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
+        logger.info("Evaluation: ArgPos")
+        logger.info("- Acc: {}".format(accuracy_score(y, y_pred_c)))
+        prec, recall, f1, support = precision_recall_fscore_support(y, y_pred_c, average='macro')
+        logger.info("- Macro PRF: {} {} {}".format(prec, recall, f1))
+        logger.info("- Kappa: {}".format(cohen_kappa_score(y, y_pred_c)))
 
     def get_argument_position(self, parse, connective: str, leaf_index):
         x = get_features(parse, connective, leaf_index)

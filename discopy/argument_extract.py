@@ -1,11 +1,15 @@
 import logging
+import logging
 import os
 import pickle
 import ujson as json
 
 import nltk
-import sklearn
-import sklearn.pipeline
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
+from sklearn.pipeline import Pipeline
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
@@ -115,17 +119,21 @@ def generate_pdtb_features(pdtb, parses):
 
 class ArgumentExtractClassifier:
     def __init__(self):
-        self.ss_model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
-            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial',
-                                                              n_jobs=-1, max_iter=200))
+        self.ss_model = Pipeline([
+            ('vectorizer', DictVectorizer()),
+            ('variance', VarianceThreshold(threshold=0.001)),
+            ('selector', SelectKBest(chi2, k=100)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
         ])
-        self.ps_model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
-            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial',
-                                                              n_jobs=-1, max_iter=200))
+        self.ps_model = Pipeline([
+            ('vectorizer', DictVectorizer()),
+            ('variance', VarianceThreshold(threshold=0.001)),
+            ('selector', SelectKBest(chi2, k=100)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
         ])
 
     def load(self, path):
@@ -140,8 +148,24 @@ class ArgumentExtractClassifier:
         (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(pdtb, parses)
         self.ss_model.fit(X_ss, y_ss)
         self.ps_model.fit(X_ps, y_ps)
-        logger.info("SS Acc: {}".format(self.ss_model.score(X_ss, y_ss)))
-        logger.info("PS Acc: {}".format(self.ps_model.score(X_ps, y_ps)))
+
+    def score(self, pdtb, parses):
+        (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(pdtb, parses)
+        y_pred = self.ss_model.predict_proba(X_ss)
+        y_pred_c = self.ss_model.classes_[y_pred.argmax(axis=1)]
+        logger.info("Evaluation: SS Model")
+        logger.info("- Acc: {}".format(accuracy_score(y_ss, y_pred_c)))
+        prec, recall, f1, support = precision_recall_fscore_support(y_ss, y_pred_c, average='macro')
+        logger.info("- Macro PRF: {:} {} {}".format(prec, recall, f1))
+        logger.info("- Kappa: {}".format(cohen_kappa_score(y_ss, y_pred_c)))
+
+        y_pred = self.ps_model.predict_proba(X_ps)
+        y_pred_c = self.ps_model.classes_[y_pred.argmax(axis=1)]
+        logger.info("Evaluation: PS Model")
+        logger.info("- Acc: {}".format(accuracy_score(y_ps, y_pred_c)))
+        prec, recall, f1, support = precision_recall_fscore_support(y_ps, y_pred_c, average='macro')
+        logger.info("- Macro PRF: {:} {} {}".format(prec, recall, f1))
+        logger.info("- Kappa: {}".format(cohen_kappa_score(y_ps, y_pred_c)))
 
     def extract_arguments(self, ptree, relation):
         indices = [token[4] for token in relation['Connective']['TokenList']]

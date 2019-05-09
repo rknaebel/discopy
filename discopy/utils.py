@@ -9,7 +9,6 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 logger = logging.getLogger('discopy')
 
-
 discourse_adverbial = {'accordingly', 'additionally', 'afterwards', 'also', 'alternatively', 'as a result',
                        'as an alternative', 'as well', 'besides', 'by comparison', 'by contrast',
                        'by then', 'consequently', 'conversely', 'earlier', 'either..or', 'except', 'finally',
@@ -233,9 +232,15 @@ def preprocess_relations(pdtb, level=2):
             sense.append('.'.join(s.split('.')[:level]))
         r['Sense'] = sense
     n_senses = Counter(s for r in pdtb for s in r['Sense'])
-    limit = len(pdtb) // (len(n_senses) * 2)
+    logger.debug(n_senses)
+    limit = len(pdtb) // (len(n_senses) * 10)
+    logger.debug("Limit: {}".format(limit))
     pdtb = [r for r in pdtb if n_senses.get(r['Sense'][0], 0) > limit]
     logger.info("Preprocessed PDTB relations left: {}".format(len(pdtb)))
+    logger.debug("Remaining classes")
+    logger.debug({k: v for k, v in n_senses.items() if v > limit})
+    logger.debug("Removed classes")
+    logger.debug([k for k, v in n_senses.items() if v < limit])
     return pdtb
 
 
@@ -249,7 +254,7 @@ def init_logger(path):
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
     # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%y-%b-%d %H:%M:%S')
+    formatter = logging.Formatter('%(asctime)s (%(levelname)s) %(message)s', datefmt='%y-%m-%d %H:%M:%S')
     fh.setFormatter(formatter)
     ch.setFormatter(formatter)
     # add the handlers to the logger

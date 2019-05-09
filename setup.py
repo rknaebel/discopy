@@ -15,7 +15,10 @@ setup(name='discopy-rknaebel',
       packages=find_packages(),
       install_requires=[
           'numpy',
-          'nltk'
+          'nltk',
+          'joblib',
+          'sklearn',
+          'ujson'
       ],
       zip_safe=False,
       entry_points={

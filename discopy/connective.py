@@ -3,11 +3,15 @@ import os
 import pickle
 import ujson as json
 from collections import defaultdict
+from typing import Dict, List
 
 import nltk
 import sklearn
 import sklearn.pipeline
-from typing import Dict, List
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_selection import VarianceThreshold, SelectKBest
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import cohen_kappa_score, precision_recall_fscore_support, accuracy_score
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives
@@ -168,9 +172,12 @@ def generate_pdtb_features(pdtb, parses):
 class ConnectiveClassifier:
     def __init__(self):
         self.model = sklearn.pipeline.Pipeline([
-            ('vectorizer', sklearn.feature_extraction.DictVectorizer()),
-            ('selector', sklearn.feature_selection.SelectKBest(sklearn.feature_selection.chi2, k=100)),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', max_iter=200, n_jobs=-1))
+            ('vectorizer', DictVectorizer()),
+            ('variance', VarianceThreshold(threshold=0.001)),
+            ('selector', SelectKBest(sklearn.feature_selection.chi2, k=100)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
         ])
 
     def load(self, path):
@@ -182,7 +189,16 @@ class ConnectiveClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        logger.info("Acc: {}".format(self.model.score(X, y)))
+
+    def score(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        y_pred = self.model.predict_proba(X)
+        y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
+        logger.info("Evaluation: Connective")
+        logger.info("- Acc: {}".format(accuracy_score(y, y_pred_c)))
+        prec, recall, f1, support = precision_recall_fscore_support(y, y_pred_c, average='macro')
+        logger.info("- Macro PRF: {} {} {}".format(prec, recall, f1))
+        logger.info("- Kappa: {}".format(cohen_kappa_score(y, y_pred_c)))
 
     def get_connective(self, parsetree, sentence, word_idx) -> (List[str], float):
         candidate = match_connectives(sentence, word_idx)

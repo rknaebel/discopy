@@ -5,9 +5,10 @@ import ujson as json
 from collections import defaultdict
 
 import nltk
-import sklearn
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, VarianceThreshold
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline, FeatureUnion
 
 from discopy.utils import ItemSelector, preprocess_relations
@@ -122,8 +123,9 @@ class NonExplicitSenseClassifier:
                     ('reduce', SelectKBest(mutual_info_classif, k=500))
                 ]))
             ])),
-            ('model', sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', n_jobs=-1,
-                                                              max_iter=200))
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
         ])
 
     def load(self, path):
@@ -135,7 +137,16 @@ class NonExplicitSenseClassifier:
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
-        logger.info("Acc: {}".format(self.model.score(X, y)))
+
+    def score(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        y_pred = self.model.predict_proba(X)
+        y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
+        logger.info("Evaluation: Sense(non-explicit)")
+        logger.info("- Acc: {}".format(accuracy_score(y, y_pred_c)))
+        prec, recall, f1, support = precision_recall_fscore_support(y, y_pred_c, average='macro')
+        logger.info("- Macro PRF: {} {} {}".format(prec, recall, f1))
+        logger.info("- Kappa: {}".format(cohen_kappa_score(y, y_pred_c)))
 
     def get_sense(self, sents_prev, sents, dtree_prev, dtree, arg1, arg2):
         x = get_features([sents_prev], [sents], [dtree_prev], [dtree], arg1, arg2)
