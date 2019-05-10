@@ -143,10 +143,10 @@ class NonExplicitSenseClassifier:
         y_pred = self.model.predict_proba(X)
         y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: Sense(non-explicit)")
-        logger.info("- Acc: {}".format(accuracy_score(y, y_pred_c)))
+        logger.info("    Acc  : {:<06.4}".format(accuracy_score(y, y_pred_c)))
         prec, recall, f1, support = precision_recall_fscore_support(y, y_pred_c, average='macro')
-        logger.info("- Macro PRF: {} {} {}".format(prec, recall, f1))
-        logger.info("- Kappa: {}".format(cohen_kappa_score(y, y_pred_c)))
+        logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
+        logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred_c)))
 
     def get_sense(self, sents_prev, sents, dtree_prev, dtree, arg1, arg2):
         x = get_features([sents_prev], [sents], [dtree_prev], [dtree], arg1, arg2)

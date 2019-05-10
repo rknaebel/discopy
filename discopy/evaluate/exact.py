@@ -6,9 +6,9 @@ logger = logging.getLogger('discopy')
 
 
 def print_results(results, mode):
-    logger.info('================================================')
+    logger.info('==========================================================')
     logger.info('Evaluation for {} discourse relations:'.format(mode))
-    logger.info('================================================')
+    logger.info('==========================================================')
     logger.info('Conn extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[0])))
     logger.info('Arg1 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[1])))
     logger.info('Arg2 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[2])))
@@ -79,6 +79,7 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
         )
     results = np.stack(results).sum(axis=0)
     print_results(results, 'NON-EXPLICIT')
+    logger.info('==========================================================')
 
 
 def evaluate_argument_extractor(gold_list, predicted_list, threshold=0.9):

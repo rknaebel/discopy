@@ -153,18 +153,18 @@ class ArgumentExtractClassifier:
         y_pred = self.ss_model.predict_proba(X_ss)
         y_pred_c = self.ss_model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: SS Model")
-        logger.info("- Acc: {}".format(accuracy_score(y_ss, y_pred_c)))
+        logger.info("    Acc  : {:<06.4}".format(accuracy_score(y_ss, y_pred_c)))
         prec, recall, f1, support = precision_recall_fscore_support(y_ss, y_pred_c, average='macro')
-        logger.info("- Macro PRF: {:} {} {}".format(prec, recall, f1))
-        logger.info("- Kappa: {}".format(cohen_kappa_score(y_ss, y_pred_c)))
+        logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
+        logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y_ss, y_pred_c)))
 
         y_pred = self.ps_model.predict_proba(X_ps)
         y_pred_c = self.ps_model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: PS Model")
-        logger.info("- Acc: {}".format(accuracy_score(y_ps, y_pred_c)))
+        logger.info("    Acc  : {:<06.4}".format(accuracy_score(y_ps, y_pred_c)))
         prec, recall, f1, support = precision_recall_fscore_support(y_ps, y_pred_c, average='macro')
-        logger.info("- Macro PRF: {:} {} {}".format(prec, recall, f1))
-        logger.info("- Kappa: {}".format(cohen_kappa_score(y_ps, y_pred_c)))
+        logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
+        logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y_ps, y_pred_c)))
 
     def extract_arguments(self, ptree, relation):
         indices = [token[4] for token in relation['Connective']['TokenList']]
