@@ -224,23 +224,24 @@ class ItemSelector(BaseEstimator, TransformerMixin):
         return [item[self.key] for item in data_items]
 
 
-def preprocess_relations(pdtb, level=2):
+def preprocess_relations(pdtb, level=2, filters=True):
     pdtb = copy.deepcopy(pdtb)
     for r in pdtb:
         sense = []
         for s in r['Sense']:
             sense.append('.'.join(s.split('.')[:level]))
         r['Sense'] = sense
-    n_senses = Counter(s for r in pdtb for s in r['Sense'])
-    logger.debug(n_senses)
-    limit = len(pdtb) // (len(n_senses) * 10)
-    logger.debug("Limit: {}".format(limit))
-    pdtb = [r for r in pdtb if n_senses.get(r['Sense'][0], 0) > limit]
-    logger.info("Preprocessed PDTB relations left: {}".format(len(pdtb)))
-    logger.debug("Remaining classes")
-    logger.debug({k: v for k, v in n_senses.items() if v > limit})
-    logger.debug("Removed classes")
-    logger.debug([k for k, v in n_senses.items() if v < limit])
+    if filters:
+        n_senses = Counter(s for r in pdtb for s in r['Sense'])
+        logger.debug(n_senses)
+        limit = len(pdtb) // (len(n_senses) * 10)
+        logger.debug("Limit: {}".format(limit))
+        pdtb = [r for r in pdtb if n_senses.get(r['Sense'][0], 0) > limit]
+        logger.info("Preprocessed PDTB relations left: {}".format(len(pdtb)))
+        logger.debug("Remaining classes")
+        logger.debug({k: v for k, v in n_senses.items() if v > limit})
+        logger.debug("Removed classes")
+        logger.debug([k for k, v in n_senses.items() if v < limit])
     return pdtb
 
 

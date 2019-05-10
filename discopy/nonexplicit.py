@@ -74,9 +74,9 @@ def get_features(ptrees_prev, ptrees, dtrees_prev, dtrees, arg1, arg2):
     return features
 
 
-def generate_pdtb_features(pdtb, parses):
+def generate_pdtb_features(pdtb, parses, filters=True):
     features = []
-    pdtb = preprocess_relations(list(filter(lambda i: i['Type'] != 'Explicit', pdtb)))
+    pdtb = preprocess_relations(list(filter(lambda i: i['Type'] != 'Explicit', pdtb)), filters=filters)
     for relation in pdtb:
         arg1_sentence_ids = {t[3] for t in relation['Arg1']['TokenList']}
         arg2_sentence_ids = {t[3] for t in relation['Arg2']['TokenList']}
@@ -139,7 +139,7 @@ class NonExplicitSenseClassifier:
         self.model.fit(X, y)
 
     def score(self, pdtb, parses):
-        X, y = generate_pdtb_features(pdtb, parses)
+        X, y = generate_pdtb_features(pdtb, parses, filters=False)
         y_pred = self.model.predict_proba(X)
         y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: Sense(non-explicit)")

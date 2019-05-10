@@ -1,8 +1,7 @@
-import codecs
-import json
 import logging
 import os
 
+import joblib
 import nltk
 import numpy as np
 
@@ -37,33 +36,37 @@ class DiscourseParser(object):
     def train(self, pdtb, parses):
         logger.info('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
+        self.connective_clf.score(pdtb, parses)
         logger.info('Train ArgPosition Classifier...')
         self.arg_pos_clf.fit(pdtb, parses)
+        self.arg_pos_clf.score(pdtb, parses)
         logger.info('Train Argument Extractor...')
         self.arg_extract_clf.fit(pdtb, parses)
+        self.arg_extract_clf.score(pdtb, parses)
         logger.info('Train Explicit Sense Classifier...')
         self.explicit_clf.fit(pdtb, parses)
+        self.explicit_clf.score(pdtb, parses)
         logger.info('Train Non-Explicit Sense Classifier...')
         self.non_explicit_clf.fit(pdtb, parses)
+        self.non_explicit_clf.score(pdtb, parses)
+
+    def score(self, pdtb, parses):
+        self.connective_clf.score(pdtb, parses)
+        self.arg_pos_clf.score(pdtb, parses)
+        self.arg_extract_clf.score(pdtb, parses)
+        self.explicit_clf.score(pdtb, parses)
+        self.non_explicit_clf.score(pdtb, parses)
 
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
-        self.connective_clf.save(path)
-        self.arg_pos_clf.save(path)
-        self.arg_extract_clf.save(path)
-        self.explicit_clf.save(path)
-        self.non_explicit_clf.save(path)
+        joblib.dump(self, os.path.join(path, 'parser.joblib'))
 
-    def load(self, path):
-        self.connective_clf.load(path)
-        self.arg_pos_clf.load(path)
-        self.arg_extract_clf.load(path)
-        self.explicit_clf.load(path)
-        self.non_explicit_clf.load(path)
+    @staticmethod
+    def from_path(path):
+        return joblib.load(os.path.join(path, 'parser.joblib'))
 
-    def parse_file(self, input_file):
-        documents = json.loads(codecs.open(input_file, mode='rb', encoding='utf-8').read())
+    def parse_documents(self, documents):
         relations = []
         for idx, (doc_id, doc) in enumerate(documents.items()):
             parsed_relations = self.parse_doc(doc)

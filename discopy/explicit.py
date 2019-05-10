@@ -43,9 +43,9 @@ def get_features(relation, ptree):
     return feat
 
 
-def generate_pdtb_features(pdtb, parses):
+def generate_pdtb_features(pdtb, parses, filters=True):
     features = []
-    pdtb = preprocess_relations(list(filter(lambda i: i['Type'] == 'Explicit', pdtb)))
+    pdtb = preprocess_relations(list(filter(lambda i: i['Type'] == 'Explicit', pdtb)), filters=filters)
     for relation in pdtb:
         sentenceOffSet = relation['Connective']['TokenList'][0][3]
         doc = relation['DocID']
@@ -81,7 +81,7 @@ class ExplicitSenseClassifier:
         self.model.fit(X, y)
 
     def score(self, pdtb, parses):
-        X, y = generate_pdtb_features(pdtb, parses)
+        X, y = generate_pdtb_features(pdtb, parses, filters=False)
         y_pred = self.model.predict_proba(X)
         y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: Sense(explicit)")
