@@ -5,13 +5,13 @@ import ujson as json
 from collections import defaultdict
 
 import nltk
+from discopy.utils import ItemSelector, preprocess_relations
+from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline, FeatureUnion
-
-from discopy.utils import ItemSelector, preprocess_relations
 
 logger = logging.getLogger('discopy')
 
@@ -101,32 +101,60 @@ def generate_pdtb_features(pdtb, parses, filters=True):
 
 
 class NonExplicitSenseClassifier:
-    def __init__(self):
-        self.model = Pipeline([
-            ('union', FeatureUnion([
-                ('productions', Pipeline([
-                    ('selector', ItemSelector(key='prod')),
-                    ('vectorizer', DictVectorizer()),
-                    ('variance', VarianceThreshold(threshold=0.001)),
-                    ('reduce', SelectKBest(mutual_info_classif, k=100))
+    def __init__(self, n_estimators=1):
+        if n_estimators > 1:
+            self.model = Pipeline([
+                ('union', FeatureUnion([
+                    ('productions', Pipeline([
+                        ('selector', ItemSelector(key='prod')),
+                        ('vectorizer', DictVectorizer()),
+                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('reduce', SelectKBest(mutual_info_classif, k=100))
+                    ])),
+                    ('dependecies', Pipeline([
+                        ('selector', ItemSelector(key='deps')),
+                        ('vectorizer', DictVectorizer()),
+                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('reduce', SelectKBest(mutual_info_classif, k=100))
+                    ])),
+                    ('word_pairs', Pipeline([
+                        ('selector', ItemSelector(key='word_pairs')),
+                        ('vectorizer', DictVectorizer()),
+                        ('variance', VarianceThreshold(threshold=0.0001)),
+                        ('reduce', SelectKBest(mutual_info_classif, k=500))
+                    ]))
                 ])),
-                ('dependecies', Pipeline([
-                    ('selector', ItemSelector(key='deps')),
-                    ('vectorizer', DictVectorizer()),
-                    ('variance', VarianceThreshold(threshold=0.001)),
-                    ('reduce', SelectKBest(mutual_info_classif, k=100))
+                ('bagging', BaggingClassifier(base_estimator=Pipeline([
+                    ('model', SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                                            class_weight='balanced', random_state=0))
+                ]), n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
+            ])
+        else:
+            self.model = Pipeline([
+                ('union', FeatureUnion([
+                    ('productions', Pipeline([
+                        ('selector', ItemSelector(key='prod')),
+                        ('vectorizer', DictVectorizer()),
+                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('reduce', SelectKBest(mutual_info_classif, k=100))
+                    ])),
+                    ('dependecies', Pipeline([
+                        ('selector', ItemSelector(key='deps')),
+                        ('vectorizer', DictVectorizer()),
+                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('reduce', SelectKBest(mutual_info_classif, k=100))
+                    ])),
+                    ('word_pairs', Pipeline([
+                        ('selector', ItemSelector(key='word_pairs')),
+                        ('vectorizer', DictVectorizer()),
+                        ('variance', VarianceThreshold(threshold=0.0001)),
+                        ('reduce', SelectKBest(mutual_info_classif, k=500))
+                    ]))
                 ])),
-                ('word_pairs', Pipeline([
-                    ('selector', ItemSelector(key='word_pairs')),
-                    ('vectorizer', DictVectorizer()),
-                    ('variance', VarianceThreshold(threshold=0.005)),
-                    ('reduce', SelectKBest(mutual_info_classif, k=500))
-                ]))
-            ])),
-            ('model',
-             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
-                           class_weight='balanced', random_state=0))
-        ])
+                ('model',
+                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                               class_weight='balanced', random_state=0))
+            ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'non_explicit_clf.p'), 'rb'))

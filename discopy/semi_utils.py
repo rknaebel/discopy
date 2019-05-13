@@ -28,6 +28,8 @@ argument_parser.add_argument("--iters", help="",
                              default=10, type=int)
 argument_parser.add_argument("--samples", help="",
                              default=100, type=int)
+argument_parser.add_argument("--estimators", help="",
+                             default=1, type=int)
 argument_parser.add_argument("--skip-eval", help="",
                              action='store_true')
 args = argument_parser.parse_args()

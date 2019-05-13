@@ -119,6 +119,8 @@ def evaluate_sense(gold_list, predicted_list, threshold=0.9):
     gold_to_predicted_map = _link_gold_predicted(gold_list, predicted_list, threshold)
     for gi, gr in enumerate(gold_list):
         if gi in gold_to_predicted_map:
+            # TODO check change
+            # if any(g.startswith(p) for g in gr.senses for p in predicted_list[gold_to_predicted_map[gi]].senses):
             if any(g in predicted_list[gold_to_predicted_map[gi]].senses for g in gr.senses):
                 tp += 1
             else:

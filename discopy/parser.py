@@ -4,7 +4,6 @@ import os
 import joblib
 import nltk
 import numpy as np
-
 from discopy.argument_extract import ArgumentExtractClassifier
 from discopy.argument_position import ArgumentPositionClassifier
 from discopy.connective import ConnectiveClassifier
@@ -26,12 +25,12 @@ def get_raw_tokens(doc_words, idxs):
 
 class DiscourseParser(object):
 
-    def __init__(self):
-        self.connective_clf = ConnectiveClassifier()
-        self.arg_pos_clf = ArgumentPositionClassifier()
-        self.arg_extract_clf = ArgumentExtractClassifier()
-        self.explicit_clf = ExplicitSenseClassifier()
-        self.non_explicit_clf = NonExplicitSenseClassifier()
+    def __init__(self, n_estimators=1):
+        self.connective_clf = ConnectiveClassifier(n_estimators=n_estimators)
+        self.arg_pos_clf = ArgumentPositionClassifier(n_estimators=n_estimators)
+        self.arg_extract_clf = ArgumentExtractClassifier(n_estimators=n_estimators)
+        self.explicit_clf = ExplicitSenseClassifier(n_estimators=n_estimators)
+        self.non_explicit_clf = NonExplicitSenseClassifier(n_estimators=n_estimators)
 
     def train(self, pdtb, parses):
         logger.info('Train Connective Classifier...')

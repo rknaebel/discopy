@@ -3,16 +3,16 @@ import os
 import pickle
 import ujson as json
 
+import discopy.conn_head_mapper
 import nltk
+from discopy.features import get_connective_sentence_position, lca, get_pos_features
 from nltk.tree import ParentedTree
+from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, cohen_kappa_score
 from sklearn.pipeline import Pipeline
-
-import discopy.conn_head_mapper
-from discopy.features import get_connective_sentence_position, lca, get_pos_features
 
 logger = logging.getLogger('discopy')
 
@@ -68,15 +68,26 @@ def generate_pdtb_features(pdtb, parses):
 
 
 class ArgumentPositionClassifier:
-    def __init__(self):
-        self.model = Pipeline([
-            ('vectorizer', DictVectorizer()),
-            ('variance', VarianceThreshold(threshold=0.001)),
-            ('selector', SelectKBest(chi2, k=100)),
-            ('model',
-             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
-                           class_weight='balanced', random_state=0))
-        ])
+    def __init__(self, n_estimators=1):
+        if n_estimators > 1:
+            self.model = Pipeline([
+                ('vectorizer', DictVectorizer()),
+                ('bagging', BaggingClassifier(base_estimator=Pipeline([
+                    ('variance', VarianceThreshold(threshold=0.001)),
+                    ('selector', SelectKBest(chi2, k=100)),
+                    ('model', SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                                            class_weight='balanced', random_state=0))
+                ]), n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
+            ])
+        else:
+            self.model = Pipeline([
+                ('vectorizer', DictVectorizer()),
+                ('variance', VarianceThreshold(threshold=0.001)),
+                ('selector', SelectKBest(chi2, k=100)),
+                ('model',
+                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                               class_weight='balanced', random_state=0))
+            ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'position_clf.p'), 'rb'))

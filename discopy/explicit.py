@@ -4,15 +4,15 @@ import os
 import pickle
 
 import nltk
-from sklearn.feature_extraction import DictVectorizer
-from sklearn.feature_selection import SelectKBest, chi2
-from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
-from sklearn.pipeline import Pipeline
-
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_connective_sentence_position, lca
 from discopy.utils import preprocess_relations
+from sklearn.ensemble import BaggingClassifier
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
+from sklearn.pipeline import Pipeline
 
 logger = logging.getLogger('discopy')
 
@@ -61,14 +61,26 @@ def generate_pdtb_features(pdtb, parses, filters=True):
 
 
 class ExplicitSenseClassifier:
-    def __init__(self):
-        self.model = Pipeline([
-            ('vectorizer', DictVectorizer()),
-            ('selector', SelectKBest(chi2, k=100)),
-            ('model',
-             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, early_stopping=True, max_iter=100, n_jobs=-1,
-                           class_weight='balanced', random_state=0))
-        ])
+    def __init__(self, n_estimators=1):
+        if n_estimators > 1:
+            self.model = Pipeline([
+                ('vectorizer', DictVectorizer()),
+                ('bagging', BaggingClassifier(base_estimator=Pipeline([
+                    ('variance', VarianceThreshold(threshold=0.001)),
+                    ('selector', SelectKBest(mutual_info_classif, k=100)),
+                    ('model', SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                                            class_weight='balanced', random_state=0))
+                ]), n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
+            ])
+        else:
+            self.model = Pipeline([
+                ('vectorizer', DictVectorizer()),
+                ('variance', VarianceThreshold(threshold=0.001)),
+                ('selector', SelectKBest(mutual_info_classif, k=100)),
+                ('model',
+                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                               class_weight='balanced', random_state=0))
+            ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'explicit_clf.p'), 'rb'))
