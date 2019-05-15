@@ -245,22 +245,23 @@ def preprocess_relations(pdtb, level=2, filters=True):
     return pdtb
 
 
-def init_logger(path):
+def init_logger(path=''):
     logger = logging.getLogger('discopy')
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler(path, mode='a')
-    # create file handler which logs even debug messages
-    fh.setLevel(logging.DEBUG)
     # create console handler
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
     # create formatter and add it to the handlers
     formatter = logging.Formatter('%(asctime)s (%(levelname)s) %(message)s', datefmt='%y-%m-%d %H:%M:%S')
-    fh.setFormatter(formatter)
     ch.setFormatter(formatter)
     # add the handlers to the logger
-    logger.addHandler(fh)
     logger.addHandler(ch)
+    if path:
+        fh = logging.FileHandler(path, mode='a')
+        # create file handler which logs even debug messages
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
     logger.info('=' * 50)
     logger.info('@  NEW RUN')
     logger.info('=' * 50)
