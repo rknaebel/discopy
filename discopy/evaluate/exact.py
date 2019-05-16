@@ -2,6 +2,8 @@ import logging
 
 import numpy as np
 
+from discopy.utils import Relation
+
 logger = logging.getLogger('discopy')
 
 
@@ -14,6 +16,21 @@ def print_results(results, mode):
     logger.info('Arg2 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[2])))
     logger.info('Concat(Arg1, Arg2) extractor: P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[3])))
     logger.info('Sense:                        P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[4])))
+
+
+def evaluate_conll_document(gold_conll_list, pred_conll_list, threshold=0.9):
+    gold_list = [Relation.from_conll(r) for r in gold_conll_list]
+    pred_list = [Relation.from_conll(r) for r in pred_conll_list]
+    connective_cm = evaluate_connectives(gold_list, pred_list, threshold)
+    arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, pred_list, threshold)
+    sense_cm = evaluate_sense(gold_list, pred_list, threshold)
+    return (
+        round(compute_prf(*connective_cm)[2], 2),
+        round(compute_prf(*arg1_cm)[2], 2),
+        round(compute_prf(*arg2_cm)[2], 2),
+        round(compute_prf(*rel_arg_cm)[2], 2),
+        round(compute_prf(*sense_cm)[2], 2),
+    )
 
 
 def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9):

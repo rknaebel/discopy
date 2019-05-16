@@ -2,19 +2,22 @@ import copy
 import os
 import ujson as json
 
-import discopy.evaluate.exact
 import numpy as np
+
+import discopy.evaluate.exact
 from discopy.parser import DiscourseParser
-from discopy.semi_utils import args
 from discopy.semi_utils import extract_discourse_relations, evaluate_parser, load_corpus
+from discopy.semi_utils import get_arguments
 from discopy.utils import init_logger
+
+args = get_arguments()
 
 os.makedirs(args.dir, exist_ok=True)
 
 logger = init_logger(os.path.join(args.dir, 'self.log'))
 
 
-def get_additional_data(parser, additional_parses, parses_train, pdtb_train, confidence_threshold=0.70):
+def get_additional_data(parser, additional_parses, parses_train, pdtb_train, confidence_threshold=0.70, n_take=10):
     preds = extract_discourse_relations(parser, additional_parses)
     confident_documents = [doc_id for doc_id, doc in preds.items()
                            if doc['Confidence'] > confidence_threshold]
@@ -23,9 +26,9 @@ def get_additional_data(parser, additional_parses, parses_train, pdtb_train, con
     logger.info("Found confident documents: {}".format(len(confident_documents)))
 
     if len(confident_documents) == 0:
-        logger.info("No confident documents: take five best")
+        logger.info("No confident documents: take {} best".format(n_take))
         confident_documents = [doc_id for doc_id, _ in
-                               sorted(preds.items(), key=(lambda d: d[1]['Confidence']), reverse=True)][:5]
+                               sorted(preds.items(), key=(lambda d: d[1]['Confidence']), reverse=True)][:n_take]
 
     parses_semi_train = copy.copy(parses_train)
     pdtb_semi_train = copy.copy(pdtb_train)

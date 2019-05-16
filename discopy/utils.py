@@ -1,12 +1,13 @@
-#
-# argument extractor
-#
 import copy
 import logging
 from collections import defaultdict, Counter
 
+import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
+#
+# argument extractor
+#
 logger = logging.getLogger('discopy')
 
 discourse_adverbial = {'accordingly', 'additionally', 'afterwards', 'also', 'alternatively', 'as a result',
@@ -150,6 +151,14 @@ class Relation:
         d_arg2 = jaccard_distance(self.arg2 | self.conn, other.arg2 | other.conn)
         return (d_arg1 + d_arg2) / 2
 
+    @staticmethod
+    def from_conll(r):
+        conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
+        arg1 = [(i[2] if type(i) == list else i) for i in r['Arg1']['TokenList']]
+        arg2 = [(i[2] if type(i) == list else i) for i in r['Arg2']['TokenList']]
+        senses = r['Sense']
+        return Relation(arg1, arg2, conn, senses)
+
 
 def convert_to_conll(document):
     p = {
@@ -176,11 +185,7 @@ def convert_to_conll(document):
 def load_relations(relations_json):
     relations = defaultdict(list)
     for r in relations_json:
-        conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
-        arg1 = [(i[2] if type(i) == list else i) for i in r['Arg1']['TokenList']]
-        arg2 = [(i[2] if type(i) == list else i) for i in r['Arg2']['TokenList']]
-        senses = r['Sense']
-        relations[r['DocID']].append(Relation(arg1, arg2, conn, senses))
+        relations[r['DocID']].append(Relation.from_conll(r))
     return dict(relations)
 
 
@@ -245,12 +250,12 @@ def preprocess_relations(pdtb, level=2, filters=True):
     return pdtb
 
 
-def init_logger(path=''):
+def init_logger(path='', log_level='INFO'):
     logger = logging.getLogger('discopy')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(log_level)
     # create console handler
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
+    ch.setLevel(log_level)
     # create formatter and add it to the handlers
     formatter = logging.Formatter('%(asctime)s (%(levelname)s) %(message)s', datefmt='%y-%m-%d %H:%M:%S')
     ch.setFormatter(formatter)
@@ -259,10 +264,22 @@ def init_logger(path=''):
     if path:
         fh = logging.FileHandler(path, mode='a')
         # create file handler which logs even debug messages
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(log_level)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
     logger.info('=' * 50)
     logger.info('@  NEW RUN')
     logger.info('=' * 50)
     return logger
+
+
+def bootstrap_dataset(pdtb, parses, n_straps=3, ratio=0.7, replace=True):
+    n_samples = int(len(parses) * ratio)
+    doc_ids = list(parses.keys())
+    straps = []
+    for i in range(n_straps):
+        strap_doc_ids = set(np.random.choice(doc_ids, size=n_samples, replace=replace))
+        strap_pdtb = [r for r in pdtb if r['DocID'] in strap_doc_ids]
+        strap_parses = {doc_id: doc for doc_id, doc in parses.items() if doc_id in strap_doc_ids}
+        straps.append((strap_pdtb, strap_parses))
+    return straps
