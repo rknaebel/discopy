@@ -3,16 +3,18 @@ import os
 import pickle
 import ujson as json
 
-import discopy.conn_head_mapper
 import nltk
-from discopy.features import get_connective_sentence_position, lca, get_pos_features
 from nltk.tree import ParentedTree
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
+from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, cohen_kappa_score
 from sklearn.pipeline import Pipeline
+
+import discopy.conn_head_mapper
+from discopy.features import get_connective_sentence_position, lca, get_pos_features
+from discopy.utils import init_logger
 
 logger = logging.getLogger('discopy')
 
@@ -72,18 +74,18 @@ class ArgumentPositionClassifier:
         if n_estimators > 1:
             self.model = Pipeline([
                 ('vectorizer', DictVectorizer()),
-                ('bagging', BaggingClassifier(base_estimator=Pipeline([
-                    ('variance', VarianceThreshold(threshold=0.001)),
-                    ('selector', SelectKBest(chi2, k=100)),
-                    ('model', SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                                            class_weight='balanced', random_state=0))
-                ]), n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
+                ('variance', VarianceThreshold(threshold=0.001)),
+                ('selector', SelectKBest(mutual_info_classif, k=100)),
+                ('model', BaggingClassifier(
+                    base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
+                                                 n_jobs=-1, class_weight='balanced', random_state=0),
+                    n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
             ])
         else:
             self.model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(chi2, k=100)),
+                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model',
                  SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
                                class_weight='balanced', random_state=0))
@@ -99,8 +101,7 @@ class ArgumentPositionClassifier:
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
 
-    def score(self, pdtb, parses):
-        X, y = generate_pdtb_features(pdtb, parses)
+    def score_on_features(self, X, y):
         y_pred = self.model.predict_proba(X)
         y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: ArgPos")
@@ -109,6 +110,10 @@ class ArgumentPositionClassifier:
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred_c)))
 
+    def score(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses)
+        self.score_on_features(X, y)
+
     def get_argument_position(self, parse, connective: str, leaf_index):
         x = get_features(parse, connective, leaf_index)
         probs = self.model.predict_proba([x])[0]
@@ -116,19 +121,19 @@ class ArgumentPositionClassifier:
 
 
 if __name__ == "__main__":
-    pdtb_train = [json.loads(s) for s in
-                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    logger = init_logger()
 
-    print('....................................................................TRAINING..................')
+    pdtb_train = [json.loads(s) for s in
+                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+
     clf = ArgumentPositionClassifier()
-    X, y = generate_pdtb_features(pdtb_train, parses_train)
-    clf.model.fit(X, y)
-    print('....................................................................ON TRAINING DATA..................')
-    print('ACCURACY {}'.format(clf.model.score(X, y)))
-    print('....................................................................ON DEVELOPMENT DATA..................')
-    X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
-    print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
+    logger.info('Train model')
+    clf.fit(pdtb_train, parses_train)
+    logger.info('Evaluation on TRAIN')
+    clf.score(pdtb_train, parses_train)
+    logger.info('Evaluation on TEST')
+    clf.score(pdtb_val, parses_val)
     clf.save('../tmp')

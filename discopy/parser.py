@@ -4,6 +4,7 @@ import os
 import joblib
 import nltk
 import numpy as np
+
 from discopy.argument_extract import ArgumentExtractClassifier
 from discopy.argument_position import ArgumentPositionClassifier
 from discopy.connective import ConnectiveClassifier
@@ -35,19 +36,14 @@ class DiscourseParser(object):
     def train(self, pdtb, parses):
         logger.info('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
-        self.connective_clf.score(pdtb, parses)
         logger.info('Train ArgPosition Classifier...')
         self.arg_pos_clf.fit(pdtb, parses)
-        self.arg_pos_clf.score(pdtb, parses)
         logger.info('Train Argument Extractor...')
         self.arg_extract_clf.fit(pdtb, parses)
-        self.arg_extract_clf.score(pdtb, parses)
         logger.info('Train Explicit Sense Classifier...')
         self.explicit_clf.fit(pdtb, parses)
-        self.explicit_clf.score(pdtb, parses)
         logger.info('Train Non-Explicit Sense Classifier...')
         self.non_explicit_clf.fit(pdtb, parses)
-        self.non_explicit_clf.score(pdtb, parses)
 
     def score(self, pdtb, parses):
         self.connective_clf.score(pdtb, parses)

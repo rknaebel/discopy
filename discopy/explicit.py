@@ -4,15 +4,16 @@ import os
 import pickle
 
 import nltk
-from discopy.conn_head_mapper import ConnHeadMapper
-from discopy.features import get_connective_sentence_position, lca
-from discopy.utils import preprocess_relations
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline
+
+from discopy.conn_head_mapper import ConnHeadMapper
+from discopy.features import get_connective_sentence_position, lca
+from discopy.utils import preprocess_relations, init_logger
 
 logger = logging.getLogger('discopy')
 
@@ -92,8 +93,7 @@ class ExplicitSenseClassifier:
         X, y = generate_pdtb_features(pdtb, parses)
         self.model.fit(X, y)
 
-    def score(self, pdtb, parses):
-        X, y = generate_pdtb_features(pdtb, parses, filters=False)
+    def score_on_features(self, X, y):
         y_pred = self.model.predict_proba(X)
         y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: Sense(explicit)")
@@ -102,6 +102,10 @@ class ExplicitSenseClassifier:
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred_c)))
 
+    def score(self, pdtb, parses):
+        X, y = generate_pdtb_features(pdtb, parses, filters=False)
+        self.score_on_features(X, y)
+
     def get_sense(self, relation, ptree):
         x = get_features(relation, ptree)
         probs = self.model.predict_proba([x])[0]
@@ -109,19 +113,19 @@ class ExplicitSenseClassifier:
 
 
 if __name__ == "__main__":
-    pdtb_train = [json.loads(s) for s in
-                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.dev/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('../../discourse/data/conll2016/en.dev/parses.json').read())
+    logger = init_logger()
 
-    print('....................................................................TRAINING..................')
+    pdtb_train = [json.loads(s) for s in
+                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+
     clf = ExplicitSenseClassifier()
-    X, y = generate_pdtb_features(pdtb_train, parses_train)
-    clf.model.fit(X, y)
-    print('....................................................................ON TRAINING DATA..................')
-    print('ACCURACY {}'.format(clf.model.score(X, y)))
-    print('....................................................................ON DEVELOPMENT DATA..................')
-    X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
-    print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
+    logger.info('Train model')
+    clf.fit(pdtb_train, parses_train)
+    logger.info('Evaluation on TRAIN')
+    clf.score(pdtb_train, parses_train)
+    logger.info('Evaluation on TEST')
+    clf.score(pdtb_val, parses_val)
     clf.save('../tmp')

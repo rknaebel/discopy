@@ -5,13 +5,14 @@ import ujson as json
 from collections import defaultdict
 
 import nltk
-from discopy.utils import ItemSelector, preprocess_relations
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline, FeatureUnion
+
+from discopy.utils import ItemSelector, preprocess_relations, init_logger
 
 logger = logging.getLogger('discopy')
 
@@ -93,7 +94,7 @@ def generate_pdtb_features(pdtb, parses, filters=True):
             continue
         arg1 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg1']['TokenList']]
         arg2 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg2']['TokenList']]
-        sense = "{}--{}".format(relation['Type'], relation['Sense'][0])
+        sense = (relation['Type'], relation['Sense'][0])
         features.append(
             (get_features(arg1_parse_trees, arg2_parse_trees, arg1_dep_trees, arg2_dep_trees, arg1, arg2), sense))
 
@@ -108,26 +109,27 @@ class NonExplicitSenseClassifier:
                     ('productions', Pipeline([
                         ('selector', ItemSelector(key='prod')),
                         ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('variance', VarianceThreshold(threshold=0.001)),
                         ('reduce', SelectKBest(mutual_info_classif, k=100))
                     ])),
                     ('dependecies', Pipeline([
                         ('selector', ItemSelector(key='deps')),
                         ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('variance', VarianceThreshold(threshold=0.001)),
                         ('reduce', SelectKBest(mutual_info_classif, k=100))
                     ])),
                     ('word_pairs', Pipeline([
                         ('selector', ItemSelector(key='word_pairs')),
                         ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.0001)),
+                        ('variance', VarianceThreshold(threshold=0.005)),
                         ('reduce', SelectKBest(mutual_info_classif, k=500))
                     ]))
                 ])),
-                ('bagging', BaggingClassifier(base_estimator=Pipeline([
-                    ('model', SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                                            class_weight='balanced', random_state=0))
-                ]), n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
+                ('model', BaggingClassifier(
+                    base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
+                                                 n_jobs=-1, class_weight='balanced', random_state=0),
+                    n_estimators=n_estimators,
+                    max_samples=0.75, n_jobs=-1))
             ])
         else:
             self.model = Pipeline([
@@ -135,19 +137,19 @@ class NonExplicitSenseClassifier:
                     ('productions', Pipeline([
                         ('selector', ItemSelector(key='prod')),
                         ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('variance', VarianceThreshold(threshold=0.001)),
                         ('reduce', SelectKBest(mutual_info_classif, k=100))
                     ])),
                     ('dependecies', Pipeline([
                         ('selector', ItemSelector(key='deps')),
                         ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.0005)),
+                        ('variance', VarianceThreshold(threshold=0.001)),
                         ('reduce', SelectKBest(mutual_info_classif, k=100))
                     ])),
                     ('word_pairs', Pipeline([
                         ('selector', ItemSelector(key='word_pairs')),
                         ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.0001)),
+                        ('variance', VarianceThreshold(threshold=0.005)),
                         ('reduce', SelectKBest(mutual_info_classif, k=500))
                     ]))
                 ])),
@@ -164,40 +166,45 @@ class NonExplicitSenseClassifier:
 
     def fit(self, pdtb, parses):
         X, y = generate_pdtb_features(pdtb, parses)
-        self.model.fit(X, y)
+        y_type, y_sense = list(zip(*y))
+        self.model.fit(X, y_sense)
 
-    def score(self, pdtb, parses):
-        X, y = generate_pdtb_features(pdtb, parses, filters=False)
+    def score_on_features(self, X, y):
+        y_type, y_sense = list(zip(*y))
         y_pred = self.model.predict_proba(X)
         y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: Sense(non-explicit)")
-        logger.info("    Acc  : {:<06.4}".format(accuracy_score(y, y_pred_c)))
-        prec, recall, f1, support = precision_recall_fscore_support(y, y_pred_c, average='macro')
+        logger.info("    Acc  : {:<06.4}".format(accuracy_score(y_sense, y_pred_c)))
+        prec, recall, f1, support = precision_recall_fscore_support(y_sense, y_pred_c, average='macro')
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
-        logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred_c)))
+        logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y_sense, y_pred_c)))
+
+    def score(self, pdtb, parses):
+        logger.debug('Extract features')
+        X, y = generate_pdtb_features(pdtb, parses, filters=False)
+        self.score_on_features(X, y)
 
     def get_sense(self, sents_prev, sents, dtree_prev, dtree, arg1, arg2):
         x = get_features([sents_prev], [sents], [dtree_prev], [dtree], arg1, arg2)
         probs = self.model.predict_proba([x])[0]
-        r_type, r_sense = self.model.classes_[probs.argmax()].split('--')
+        r_sense = self.model.classes_[probs.argmax()]
         return r_sense, probs.max()
 
 
 if __name__ == "__main__":
+    logger = init_logger()
+
     pdtb_train = [json.loads(s) for s in
-                  open('../../discourse/data/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('../../discourse/data/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('../../discourse/data/conll2016/en.test/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('../../discourse/data/conll2016/en.test/parses.json').read())
+                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
+    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
+    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
+    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
 
     clf = NonExplicitSenseClassifier()
-    print("generate features")
-    X, y = generate_pdtb_features(pdtb_train, parses_train)
-    print('train model')
-    clf.model.fit(X, y)
-    print('Evaluation on TRAIN')
-    print('ACCURACY {}'.format(clf.model.score(X, y)))
-    print('Evaluation on TEST')
-    X_val, y_val = generate_pdtb_features(pdtb_val, parses_val)
-    print('ACCURACY {}'.format(clf.model.score(X_val, y_val)))
+    logger.info('Train model')
+    clf.fit(pdtb_train, parses_train)
+    logger.info('Evaluation on TRAIN')
+    clf.score(pdtb_train, parses_train)
+    logger.info('Evaluation on TEST')
+    clf.score(pdtb_val, parses_val)
     clf.save('../tmp')
