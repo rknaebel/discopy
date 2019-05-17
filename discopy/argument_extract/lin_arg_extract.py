@@ -117,7 +117,7 @@ def generate_pdtb_features(pdtb, parses):
     return list(zip(*ss_features)), list(zip(*ps_features))
 
 
-class ArgumentExtractClassifier:
+class LinArgumentExtractClassifier:
     def __init__(self, n_estimators=1):
         if n_estimators > 1:
             self.ss_model = Pipeline([

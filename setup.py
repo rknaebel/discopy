@@ -18,6 +18,7 @@ setup(name='discopy-rknaebel',
           'nltk',
           'joblib',
           'sklearn',
+          'sklearn-crfsuite'
           'ujson'
       ],
       zip_safe=False,
