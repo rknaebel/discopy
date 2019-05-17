@@ -1,7 +1,7 @@
+import argparse
 import multiprocessing as mp
 import ujson as json
 
-import argparse
 import numpy as np
 
 import discopy.evaluate.exact
@@ -23,7 +23,7 @@ def get_arguments():
                                  default='/data/discourse/conll2016/')
     argument_parser.add_argument("--parses", help="",
                                  default='/data/discourse/conll2016/')
-    argument_parser.add_argument("--corpus", help="", required=True,
+    argument_parser.add_argument("--corpus", help="",
                                  default='')
     argument_parser.add_argument("--threshold", help="",
                                  default=0.9, type=float)
