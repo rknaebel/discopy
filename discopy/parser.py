@@ -5,11 +5,11 @@ import joblib
 import nltk
 import numpy as np
 
-from discopy.argument_extract import LinArgumentExtractClassifier
-from discopy.argument_position import ArgumentPositionClassifier
-from discopy.connective import ConnectiveClassifier
-from discopy.explicit import ExplicitSenseClassifier
-from discopy.nonexplicit import NonExplicitSenseClassifier
+from discopy.labeling import LinArgumentExtractClassifier
+from discopy.labeling.argument_position import ArgumentPositionClassifier
+from discopy.labeling.connective import ConnectiveClassifier
+from discopy.sense.explicit import ExplicitSenseClassifier
+from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 
 logger = logging.getLogger('discopy')
 

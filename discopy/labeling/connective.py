@@ -3,6 +3,7 @@ import os
 import pickle
 import ujson as json
 from collections import defaultdict
+from typing import Dict, List
 
 import nltk
 from sklearn.ensemble import BaggingClassifier
@@ -11,7 +12,6 @@ from sklearn.feature_selection import VarianceThreshold, SelectKBest, mutual_inf
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import cohen_kappa_score, precision_recall_fscore_support, accuracy_score
 from sklearn.pipeline import Pipeline
-from typing import Dict, List
 
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives, \
