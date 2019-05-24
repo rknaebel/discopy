@@ -36,8 +36,8 @@ def evaluate_conll_document(gold_conll_list, pred_conll_list, threshold=0.9):
 def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9):
     results = []
     for doc_id in gold_relations.keys():
-        gold_list = gold_relations[doc_id]
-        predicted_list = predicted_relations[doc_id]
+        gold_list = gold_relations.get(doc_id, [])
+        predicted_list = predicted_relations.get(doc_id, [])
 
         connective_cm = evaluate_connectives(gold_list, predicted_list, threshold)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list, threshold)
@@ -57,8 +57,8 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
 
     results = []
     for doc_id in gold_relations.keys():
-        gold_list = [r for r in gold_relations[doc_id] if r.is_explicit()]
-        predicted_list = [r for r in predicted_relations[doc_id] if r.is_explicit()]
+        gold_list = [r for r in gold_relations.get(doc_id, []) if r.is_explicit()]
+        predicted_list = [r for r in predicted_relations.get(doc_id, []) if r.is_explicit()]
 
         connective_cm = evaluate_connectives(gold_list, predicted_list, threshold)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list, threshold)
@@ -78,8 +78,8 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
 
     results = []
     for doc_id in gold_relations.keys():
-        gold_list = [r for r in gold_relations[doc_id] if not r.is_explicit()]
-        predicted_list = [r for r in predicted_relations[doc_id] if not r.is_explicit()]
+        gold_list = [r for r in gold_relations.get(doc_id, []) if not r.is_explicit()]
+        predicted_list = [r for r in predicted_relations.get(doc_id, []) if not r.is_explicit()]
 
         connective_cm = evaluate_connectives(gold_list, predicted_list, threshold)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list, threshold)

@@ -33,7 +33,7 @@ class DiscourseParser(object):
         self.explicit_clf = ExplicitSenseClassifier(n_estimators=n_estimators)
         self.non_explicit_clf = NonExplicitSenseClassifier(n_estimators=n_estimators)
 
-    def train(self, pdtb, parses):
+    def train(self, pdtb, parses, pdtb_val=None, parses_val=None):
         logger.info('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
         logger.info('Train ArgPosition Classifier...')
@@ -55,7 +55,22 @@ class DiscourseParser(object):
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
+
+        self.connective_clf.save(path)
+        self.arg_pos_clf.save(path)
+        self.arg_extract_clf.save(path)
+        self.explicit_clf.save(path)
+        self.non_explicit_clf.save(path)
         joblib.dump(self, os.path.join(path, 'parser.joblib'))
+
+    def load(self, path, parses=None):
+        if not os.path.exists(path):
+            raise FileNotFoundError('Path not found')
+        self.connective_clf.load(path)
+        self.arg_pos_clf.load(path)
+        self.arg_extract_clf.load(path)
+        self.explicit_clf.load(path)
+        self.non_explicit_clf.load(path)
 
     @staticmethod
     def from_path(path):

@@ -15,6 +15,10 @@ def get_arguments():
                                  default='self')
     argument_parser.add_argument("--dir", help="",
                                  default='tmp')
+    argument_parser.add_argument("--parser", help="",
+                                 default='lin')
+    argument_parser.add_argument("--train", help="",
+                                 action='store_true')
     argument_parser.add_argument("--base-dir", help="",
                                  default='')
     argument_parser.add_argument("--pdtb", help="",
