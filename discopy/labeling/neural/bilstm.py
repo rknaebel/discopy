@@ -18,7 +18,6 @@ from keras import Input, Model
 from keras.layers import Bidirectional, Dense, Dropout, Embedding, SpatialDropout1D
 from keras.layers import CuDNNLSTM as LSTM
 
-from keras_contrib.layers import CRF
 from keras_contrib.metrics import crf_marginal_accuracy
 
 import tensorflow as tf

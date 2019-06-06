@@ -7,7 +7,7 @@ import joblib
 import nltk
 
 from discopy.labeling.connective import ConnectiveClassifier
-from discopy.labeling.neural import ArgumentExtractBiLSTMCRF, ArgumentExtractBiLSTMCRFwithConn
+from discopy.labeling.neural.bilstm import ArgumentExtractBiLSTMCRF, ArgumentExtractBiLSTMCRFwithConn
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 from discopy.utils import init_logger
