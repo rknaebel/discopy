@@ -1,6 +1,7 @@
 import logging
 import os
 import ujson as json
+from collections import Counter
 
 import joblib
 import nltk
@@ -25,11 +26,145 @@ def get_raw_tokens(doc_words, idxs):
     return " ".join([doc_words[i][0][0] for i in sorted(idxs)])
 
 
+class BiLSTMDiscourseParser3(object):
+
+    def __init__(self, n_estimators=1, no_crf=False):
+        self.arg_labeler = ArgumentExtractBiLSTMCRF(window_length=150, hidden_dim=128, rnn_dim=256, no_rnn=False,
+                                                    no_dense=False, no_crf=no_crf, explicits_only=False)
+        self.explicit_clf = ExplicitSenseClassifier(n_estimators=n_estimators)
+        self.non_explicit_clf = NonExplicitSenseClassifier(n_estimators=n_estimators)
+
+    def train(self, pdtb, parses, pdtb_val, parses_val):
+        logger.info('Train Argument Extractor...')
+        self.arg_labeler.fit(pdtb, parses, pdtb_val, parses_val, epochs=10)
+        logger.info('Train Explicit Sense Classifier...')
+        self.explicit_clf.fit(pdtb, parses)
+        logger.info('Train Non-Explicit Sense Classifier...')
+        self.non_explicit_clf.fit(pdtb, parses)
+
+    def score(self, pdtb, parses):
+        self.arg_labeler.score(pdtb, parses)
+        self.explicit_clf.score(pdtb, parses)
+        self.non_explicit_clf.score(pdtb, parses)
+
+    def save(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)
+        self.arg_labeler.save(path)
+        self.explicit_clf.save(path)
+        self.non_explicit_clf.save(path)
+
+    def load(self, path, parses):
+        if not os.path.exists(path):
+            raise FileNotFoundError('Path not found')
+        self.arg_labeler.init_model(parses)
+        self.arg_labeler.load(path)
+        self.explicit_clf.load(path)
+        self.non_explicit_clf.load(path)
+
+    @staticmethod
+    def from_path(path):
+        return joblib.load(os.path.join(path, 'parser.joblib'))
+
+    def parse_documents(self, documents):
+        relations = []
+        for idx, (doc_id, doc) in enumerate(documents.items()):
+            parsed_relations = self.parse_doc(doc)
+            for p in parsed_relations:
+                p['DocID'] = doc_id
+            relations.extend(parsed_relations)
+
+        return relations
+
+    def parse_doc(self, doc):
+        relations = []
+        doc_words = [(w, s_i, w_i) for s_i, s in enumerate(doc['sentences']) for w_i, w in enumerate(s['words'])]
+
+        # ARGUMENT EXTRACTION
+        # TODO adjust max distance
+        arguments_pred = self.arg_labeler.extract_arguments([w[0][0] for w in doc_words], strides=1, max_distance=0.5)
+        # print('ArgPred', arguments_pred)
+        # print('Length', len(arguments_pred))
+        for r in arguments_pred:
+            relation = {
+                'Connective': {
+                    'TokenList': [],
+                    'RawText': ''
+                },
+                'Arg1': {
+                    'TokenList': [],
+                    'RawText': ''
+                },
+                'Arg2': {
+                    'TokenList': [],
+                    'RawText': ''
+                },
+                'Type': '',
+                'Sense': []
+            }
+            relation['Arg1']['TokenList'] = get_token_list2(doc_words, r.arg1)
+            relation['Arg1']['RawText'] = get_raw_tokens(doc_words, r.arg1)
+            relation['Arg2']['TokenList'] = get_token_list2(doc_words, r.arg2)
+            relation['Arg2']['RawText'] = get_raw_tokens(doc_words, r.arg2)
+
+            if r.conn:
+                relation['Type'] = 'Explicit'
+                sent_id = Counter(i[3] for i in get_token_list2(doc_words, r.conn)).most_common(1)[0][0]
+
+                conn = [i[2] for i in get_token_list2(doc_words, r.conn) if i[3] == sent_id]
+
+                relation['Connective']['TokenList'] = get_token_list2(doc_words, conn)
+                relation['Connective']['RawText'] = get_raw_tokens(doc_words, conn)
+
+                # EXPLICIT SENSE
+                sent_id = min([i[3] for i in relation['Connective']['TokenList']])
+                try:
+                    ptree = nltk.ParentedTree.fromstring(doc['sentences'][sent_id]['parsetree'])
+                except ValueError:
+                    logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
+                    continue
+                if not ptree.leaves():
+                    logger.warning('Failed on empty tree')
+                    continue
+
+                explicit, explicit_c = self.explicit_clf.get_sense(relation, ptree)
+                relation['Sense'] = [explicit]
+                relations.append(relation)
+            else:
+                relation['Type'] = 'Implicit'
+
+                sent_id_prev = Counter(i[3] for i in get_token_list2(doc_words, r.arg1)).most_common(1)[0][0]
+                sent_id = Counter(i[3] for i in get_token_list2(doc_words, r.arg2)).most_common(1)[0][0]
+
+                if sent_id_prev + 1 != sent_id:
+                    continue
+
+                sent = doc['sentences'][sent_id]
+                try:
+                    ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
+                    ptree_prev = nltk.ParentedTree.fromstring(doc['sentences'][sent_id - 1]['parsetree'])
+                    dtree = sent['dependencies']
+                    dtree_prev = doc['sentences'][sent_id - 1]['dependencies']
+                except ValueError:
+                    logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
+                    continue
+
+                if not ptree.leaves() or not ptree_prev.leaves():
+                    continue
+                arg1 = [doc_words[i][0][0] for i in r.arg1]
+                arg2 = [doc_words[i][0][0] for i in r.arg2]
+                sense, sense_c = self.non_explicit_clf.get_sense(ptree_prev, ptree, dtree_prev, dtree, arg1, arg2)
+                relation['Sense'] = [sense]
+                relations.append(relation)
+
+        return relations
+
+
 class BiLSTMDiscourseParser2(object):
 
-    def __init__(self, n_estimators=1):
-        self.arg_labeler = ArgumentExtractBiLSTMCRF(window_length=150, hidden_dim=64, rnn_dim=256, no_rnn=False,
-                                                    no_dense=False, no_crf=False, explicits_only=True)
+    def __init__(self, n_estimators=1, no_crf=False):
+        self.arg_labeler = ArgumentExtractBiLSTMCRF(window_length=100, hidden_dim=128, rnn_dim=512, no_rnn=False,
+                                                    no_dense=False, no_crf=no_crf, explicits_only=True)
         self.explicit_clf = ExplicitSenseClassifier(n_estimators=n_estimators)
         self.non_explicit_clf = NonExplicitSenseClassifier(n_estimators=n_estimators)
 
@@ -83,23 +218,29 @@ class BiLSTMDiscourseParser2(object):
         # ARGUMENT EXTRACTION
         # TODO adjust max distance
         arguments_pred = self.arg_labeler.extract_arguments([w[0][0] for w in doc_words], strides=1, max_distance=0.5)
-        print('ArgPred', arguments_pred)
-        print('Length', len(arguments_pred))
+        # print('ArgPred', arguments_pred)
+        # print('Length', len(arguments_pred))
         for r in arguments_pred:
+            if not r.conn:
+                continue
             relation = {
                 'Connective': {},
                 'Arg1': {},
                 'Arg2': {},
                 'Type': 'Explicit',
             }
-            relation['Connective']['TokenList'] = get_token_list2(doc_words, r.conn)
-            relation['Connective']['RawText'] = get_raw_tokens(doc_words, r.conn)
+            sent_id = Counter(i[3] for i in get_token_list2(doc_words, r.conn)).most_common(1)[0][0]
+
+            conn = [i[2] for i in get_token_list2(doc_words, r.conn) if i[3] == sent_id]
+
+            relation['Connective']['TokenList'] = get_token_list2(doc_words, conn)
+            relation['Connective']['RawText'] = get_raw_tokens(doc_words, conn)
             relation['Arg1']['TokenList'] = get_token_list2(doc_words, r.arg1)
             relation['Arg1']['RawText'] = get_raw_tokens(doc_words, r.arg1)
             relation['Arg2']['TokenList'] = get_token_list2(doc_words, r.arg2)
             relation['Arg2']['RawText'] = get_raw_tokens(doc_words, r.arg2)
             relations.append(relation)
-            print(relation)
+            # print(relation)
 
         # EXPLICIT SENSE
         for relation in relations:
@@ -177,10 +318,11 @@ class BiLSTMDiscourseParser1(object):
     Extracts explicit arguments based on the connective prediction
     """
 
-    def __init__(self, n_estimators=1):
+    def __init__(self, n_estimators=1, no_crf=False):
         self.connective_clf = ConnectiveClassifier(n_estimators=n_estimators)
-        self.arg_labeler = ArgumentExtractBiLSTMCRFwithConn(window_length=150, hidden_dim=64, rnn_dim=256, no_rnn=False,
-                                                            no_dense=False, no_crf=False)
+        self.arg_labeler = ArgumentExtractBiLSTMCRFwithConn(window_length=100, hidden_dim=128, rnn_dim=512,
+                                                            no_rnn=False,
+                                                            no_dense=False, no_crf=no_crf)
         self.explicit_clf = ExplicitSenseClassifier(n_estimators=n_estimators)
         self.non_explicit_clf = NonExplicitSenseClassifier(n_estimators=n_estimators)
 
