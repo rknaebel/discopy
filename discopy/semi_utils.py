@@ -1,7 +1,7 @@
-import argparse
 import multiprocessing as mp
 import ujson as json
 
+import argparse
 import numpy as np
 
 import discopy.evaluate.exact
@@ -18,6 +18,8 @@ def get_arguments():
     argument_parser.add_argument("--parser", help="",
                                  default='lin')
     argument_parser.add_argument("--train", help="",
+                                 action='store_true')
+    argument_parser.add_argument("--no-crf", help="",
                                  action='store_true')
     argument_parser.add_argument("--base-dir", help="",
                                  default='')

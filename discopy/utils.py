@@ -148,8 +148,9 @@ class Relation:
 
     def distance(self, other):
         d_arg1 = jaccard_distance(self.arg1, other.arg1)
-        d_arg2 = jaccard_distance(self.arg2 | self.conn, other.arg2 | other.conn)
-        return (d_arg1 + d_arg2) / 2
+        d_conn = jaccard_distance(self.conn, other.conn)
+        d_arg2 = jaccard_distance(self.arg2, other.arg2)
+        return (d_arg1 + d_arg2 + d_conn) / 3
 
     @staticmethod
     def from_conll(r):

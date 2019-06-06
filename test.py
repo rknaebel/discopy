@@ -6,8 +6,7 @@ import ujson as json
 
 import discopy.evaluate.exact
 from discopy.parser import DiscourseParser
-from discopy.parser_bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2
-# from discopy.parser_bilstm import BiLSTMDiscourseParser
+from discopy.parser_bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
 from discopy.semi_utils import get_arguments
 from discopy.utils import init_logger
 
@@ -42,8 +41,9 @@ def evaluate_parser(pdtb_gold, pdtb_pred, threshold=0.7):
 
 parsers = {
     'lin': DiscourseParser(),
-    'bilstm1': BiLSTMDiscourseParser1(),
-    'bilstm2': BiLSTMDiscourseParser2(),
+    'bilstm1': BiLSTMDiscourseParser1(no_crf=args.no_crf),
+    'bilstm2': BiLSTMDiscourseParser2(no_crf=args.no_crf),
+    'bilstm3': BiLSTMDiscourseParser3(no_crf=args.no_crf),
 }
 
 if __name__ == '__main__':
