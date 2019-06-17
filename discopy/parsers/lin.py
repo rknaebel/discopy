@@ -8,23 +8,14 @@ import numpy as np
 from discopy.labeling import LinArgumentExtractClassifier
 from discopy.labeling.argument_position import ArgumentPositionClassifier
 from discopy.labeling.connective import ConnectiveClassifier
+from discopy.parsers import get_token_list, get_raw_tokens
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 
 logger = logging.getLogger('discopy')
 
 
-def get_token_list(doc_words, tokens, sent_id, sent_off):
-    return [[doc_words[sent_off + t][1]['CharacterOffsetBegin'],
-             doc_words[sent_off + t][1]['CharacterOffsetEnd'],
-             sent_off + t, sent_id, t] for t in tokens]
-
-
-def get_raw_tokens(doc_words, idxs):
-    return " ".join([doc_words[i[2]][0] for i in idxs])
-
-
-class DiscourseParser(object):
+class LinParser(object):
 
     def __init__(self, n_estimators=1):
         self.connective_clf = ConnectiveClassifier(n_estimators=n_estimators)
