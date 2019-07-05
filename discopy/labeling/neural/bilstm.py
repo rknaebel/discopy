@@ -9,9 +9,8 @@ logger = logging.getLogger('discopy')
 
 from keras import Input, Model
 from keras.layers import Bidirectional, Dense, Dropout, SpatialDropout1D
-from keras.layers import LSTM
+from keras.layers import CuDNNLSTM as LSTM
 
-from keras_contrib.metrics import crf_marginal_accuracy
 
 import tensorflow as tf
 
@@ -40,9 +39,9 @@ class BiLSTMx:
     def __init__(self, embd_layer, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf, nb_classes):
         # learn_mode = 'join'
         # test_mode = 'viterbi'
-        learn_mode = 'marginal'
-        test_mode = 'marginal'
-        self.no_crf = no_crf
+        # learn_mode = 'marginal'
+        # test_mode = 'marginal'
+        # self.no_crf = no_crf
 
         x = Input(shape=(max_seq_len,), name='window-input')
         y = embd_layer(x)
@@ -52,11 +51,11 @@ class BiLSTMx:
         if not no_dense:
             y = Dense(hidden_dim, activation='relu', name='hidden-dense', kernel_regularizer=l2(0.001))(y)
             y = Dropout(0.2)(y)
-        if no_crf:
-            y1 = Dense(nb_classes, activation='softmax', name='args')(y)
-        else:
-            raise NotImplementedError('CRF')
-            # y1 = CRF(nb_classes, test_mode=test_mode, learn_mode=learn_mode, name='args')(y)
+        # if no_crf:
+        y1 = Dense(nb_classes, activation='softmax', name='args')(y)
+        # else:
+        #     raise NotImplementedError('CRF')
+        # y1 = CRF(nb_classes, test_mode=test_mode, learn_mode=learn_mode, name='args')(y)
 
         self.x = x
         self.y_args = y1
@@ -67,13 +66,13 @@ class BiLSTMx:
         # loss = {'args': crf_loss}
         # metrics = {'args': crf_marginal_accuracy}
 
-        if self.no_crf:
-            self.model.compile(loss=class_weighted_loss(class_weights), optimizer='adam',
-                               metrics=['accuracy'])
-        else:
-            self.model.compile(optimizer="adam",
-                               loss=class_weighted_loss(class_weights),
-                               metrics=[crf_marginal_accuracy])
+        # if self.no_crf:
+        self.model.compile(loss=class_weighted_loss(class_weights), optimizer='adam',
+                           metrics=['accuracy'])
+        # else:
+        #     self.model.compile(optimizer="adam",
+        #                        loss=class_weighted_loss(class_weights),
+        #                        metrics=[crf_marginal_accuracy])
 
     def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size, callbacks):
         self.model.fit(x_train, y_train,
@@ -92,17 +91,6 @@ class BiLSTMx:
             self.model.summary(print_fn=lambda line: fh.write("{}\n".format(line)))
         else:
             self.model.summary()
-
-
-# def encode_bio(labels):
-#     res = []
-#     bio_labels = {v:k for k,v in enumerate(['O', 'B-Arg1', 'I-Arg1', 'B-Arg2', 'I-Arg2', 'B-Conn', 'I-Conn'])}
-#     first = True
-#     for i, l in enumerate(labels):
-#         if l == 0:
-#             res.append(bio_labels['O'])
-#         elif l == 1:
-#             labels[i] = bio_labels['B-Arg1'] if first else bio_labels['I-Arg1']
 
 
 def get_coefs(word, *arr):

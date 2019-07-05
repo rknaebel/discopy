@@ -252,7 +252,7 @@ if __name__ == "__main__":
     pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
     parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
 
-    clf = ArgumentExtractClassifier()
+    clf = LinArgumentExtractClassifier()
     logger.info('Train model')
     clf.fit(pdtb_train, parses_train)
     logger.info('Evaluation on TRAIN')

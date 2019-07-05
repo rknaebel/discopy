@@ -3,7 +3,7 @@ import os
 import ujson as json
 
 import discopy.evaluate.exact
-from discopy.parser import DiscourseParser
+from discopy.parsers.lin import LinParser
 from discopy.utils import load_relations, init_logger
 
 argument_parser = argparse.ArgumentParser()
@@ -30,7 +30,7 @@ logger = init_logger(os.path.join(args.dir, 'main.log'))
 
 def main():
     if args.mode == 'train':
-        parser = DiscourseParser()
+        parser = LinParser()
         logger.info('load PDTB data')
         pdtb = [json.loads(s) for s in open(args.pdtb, 'r').readlines()]
         parses = json.loads(open(args.parses).read())
@@ -38,7 +38,7 @@ def main():
         parser.save(args.dir)
     elif args.mode == 'run':
         documents = json.loads(open(args.parses, mode='rb').read())
-        parser = discopy.parser.DiscourseParser.from_path(args.dir)
+        parser = LinParser.from_path(args.dir)
         relations = parser.parse_documents(documents)
         with open(args.out, 'w') as fh:
             fh.writelines('\n'.join(['{}'.format(json.dumps(relation)) for relation in relations]))
@@ -48,7 +48,7 @@ def main():
         discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, args.eval_threshold)
     elif args.mode == 'run-eval':
         logger.info('start run-eval')
-        parser = discopy.parser.DiscourseParser.from_path(args.dir)
+        parser = LinParser.from_path(args.dir)
         logger.info('parse test documents')
         documents = json.loads(open(args.parses, mode='rb').read())
         relations = parser.parse_documents(documents)

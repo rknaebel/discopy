@@ -5,8 +5,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import ujson as json
 
 import discopy.evaluate.exact
-from discopy.parser import DiscourseParser
-from discopy.parser_bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
+from discopy.parsers.lin import LinParser
+from discopy.parsers.gosh import GoshParser
+from discopy.parsers.bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
 from discopy.semi_utils import get_arguments
 from discopy.utils import init_logger
 
@@ -36,14 +37,15 @@ def extract_discourse_relation(doc_id, doc, parser):
 def evaluate_parser(pdtb_gold, pdtb_pred, threshold=0.7):
     gold_relations = discopy.utils.load_relations(pdtb_gold)
     pred_relations = discopy.utils.load_relations([r for doc in pdtb_pred.values() for r in doc['Relations']])
-    discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, threshold=threshold)
+    return discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, threshold=threshold)
 
 
 parsers = {
-    'lin': DiscourseParser(),
-    'bilstm1': BiLSTMDiscourseParser1(no_crf=args.no_crf),
-    'bilstm2': BiLSTMDiscourseParser2(no_crf=args.no_crf),
-    'bilstm3': BiLSTMDiscourseParser3(no_crf=args.no_crf),
+    'lin': LinParser(),
+    'gosh': GoshParser(),
+    'bilstm1': BiLSTMDiscourseParser1(),
+    'bilstm2': BiLSTMDiscourseParser2(),
+    'bilstm3': BiLSTMDiscourseParser3(),
 }
 
 if __name__ == '__main__':
@@ -57,7 +59,7 @@ if __name__ == '__main__':
     parses_test = json.loads(open(os.path.join(args.conll, 'en.test/parses.json'), 'r').read())
 
     logger.info('Init Parser...')
-    parser = parsers.get(args.parser, DiscourseParser)
+    parser = parsers.get(args.parser, LinParser)
     parser_path = args.dir
 
     # if args.base_dir and os.path.exists(os.path.join(args.base_dir, 'parser.joblib')):
@@ -79,4 +81,15 @@ if __name__ == '__main__':
 
     logger.info('extract discourse relations from test data')
     pdtb_pred = extract_discourse_relations(parser, parses_test)
-    evaluate_parser(pdtb_test, pdtb_pred, threshold=args.threshold)
+    if args.out:
+        with open(args.out, 'w') as fh:
+            for doc_id, doc in pdtb_pred.items():
+                for relation in doc['Relations']:
+                    print(relation)
+                    fh.write('{}\n'.format(json.dumps(relation)))
+
+    all_results = evaluate_parser(pdtb_test, pdtb_pred, threshold=args.threshold)
+    # if args.out:
+    #     with open('all.'+args.out, 'w') as fh:
+    #         fh.writelines('\n'.join(['{}'.format(json.dumps(res)) for doc_id, res in all_results.items()]))
+

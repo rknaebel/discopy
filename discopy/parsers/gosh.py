@@ -6,9 +6,9 @@ import joblib
 import nltk
 import numpy as np
 
-from discopy.labeling import GoshArgumentExtract
+from discopy.labeling.extract.gosh_arg_extract import GoshArgumentExtract
 from discopy.labeling.connective import ConnectiveClassifier
-from discopy.parsers import get_raw_tokens
+from discopy.parsers.utils import get_raw_tokens
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 

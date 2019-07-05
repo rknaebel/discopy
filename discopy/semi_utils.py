@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 
 import discopy.evaluate.exact
-import discopy.parser
+import discopy.parsers.lin
 import discopy.utils
 
 
@@ -15,6 +15,8 @@ def get_arguments():
                                  default='self')
     argument_parser.add_argument("--dir", help="",
                                  default='tmp')
+    argument_parser.add_argument("--out", help="",
+                                 default='')
     argument_parser.add_argument("--parser", help="",
                                  default='lin')
     argument_parser.add_argument("--train", help="",
@@ -52,7 +54,7 @@ def extract_discourse_relations(parser_path, parses):
 
 
 def extract_discourse_relation(doc_id, doc, parser_path):
-    parser = discopy.parser.DiscourseParser.from_path(parser_path)
+    parser = discopy.parsers.lin.LinParser.from_path(parser_path)
     parsed_relations = parser.parse_doc(doc)
     for p in parsed_relations:
         p['DocID'] = doc_id

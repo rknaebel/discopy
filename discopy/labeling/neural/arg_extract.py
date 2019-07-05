@@ -6,16 +6,12 @@ logger = logging.getLogger('discopy')
 import numpy as np
 import ujson as json
 
-import keras
-import tensorflow as tf
-import tensorflow_hub as hub
-import keras.backend as K
-
 from collections import defaultdict, Counter
+from keras.layers import Embedding
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint, CSVLogger
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score, classification_report
 
-from discopy.labeling.neural.bilstm import BiLSTMx, get_balanced_class_weights, logger
+from discopy.labeling.neural.bilstm import BiLSTMx, get_balanced_class_weights, logger, load_embedding_matrix
 from discopy.utils import Relation, init_logger
 
 
@@ -213,41 +209,41 @@ def reduce_relation_predictions(relations, max_distance=0.5):
     return combined
 
 
-class ElmoEmbeddingLayer(keras.layers.Layer):
-    def __init__(self, vocab, **kwargs):
-        self.dimensions = 1024
-        self.trainable = True
-        self.vocab = vocab
-        super(ElmoEmbeddingLayer, self).__init__(**kwargs)
-
-    def build(self, input_shape):
-        self.elmo = hub.Module('https://tfhub.dev/google/elmo/2', trainable=self.trainable,
-                               name="{}_module".format(self.name))
-        self.trainable_weights += K.tf.trainable_variables(scope="^{}_module/.*".format(self.name))
-        self.word_mapping = [x[0] for x in self.vocab.items()]
-        self.lookup_table = tf.contrib.lookup.index_to_string_table_from_tensor(self.word_mapping,
-                                                                                default_value="<UNK>")
-        self.lookup_table.init.run(session=K.get_session())
-        super(ElmoEmbeddingLayer, self).build(input_shape)
-
-    def call(self, x, mask=None):
-        x = tf.cast(x, dtype=tf.int64)
-        sequence_lengths = tf.cast(tf.count_nonzero(x, axis=1), dtype=tf.int32)
-        strings = self.lookup_table.lookup(x)
-        result = self.elmo(
-            inputs={
-                "tokens": strings,
-                "sequence_len": sequence_lengths,
-            },
-            signature='tokens',
-            as_dict=True)['elmo']
-        return result
-
-    def compute_mask(self, inputs, mask=None):
-        return K.not_equal(inputs, 0)
-
-    def compute_output_shape(self, input_shape):
-        return input_shape[0], input_shape[1], self.dimensions
+# class ElmoEmbeddingLayer(keras.layers.Layer):
+#     def __init__(self, vocab, **kwargs):
+#         self.dimensions = 1024
+#         self.trainable = True
+#         self.vocab = vocab
+#         super(ElmoEmbeddingLayer, self).__init__(**kwargs)
+#
+#     def build(self, input_shape):
+#         self.elmo = hub.Module('https://tfhub.dev/google/elmo/2', trainable=self.trainable,
+#                                name="{}_module".format(self.name))
+#         self.trainable_weights += K.tf.trainable_variables(scope="^{}_module/.*".format(self.name))
+#         self.word_mapping = [x[0] for x in self.vocab.items()]
+#         self.lookup_table = tf.contrib.lookup.index_to_string_table_from_tensor(self.word_mapping,
+#                                                                                 default_value="<UNK>")
+#         self.lookup_table.init.run(session=K.get_session())
+#         super(ElmoEmbeddingLayer, self).build(input_shape)
+#
+#     def call(self, x, mask=None):
+#         x = tf.cast(x, dtype=tf.int64)
+#         sequence_lengths = tf.cast(tf.count_nonzero(x, axis=1), dtype=tf.int32)
+#         strings = self.lookup_table.lookup(x)
+#         result = self.elmo(
+#             inputs={
+#                 "tokens": strings,
+#                 "sequence_len": sequence_lengths,
+#             },
+#             signature='tokens',
+#             as_dict=True)['elmo']
+#         return result
+#
+#     def compute_mask(self, inputs, mask=None):
+#         return K.not_equal(inputs, 0)
+#
+#     def compute_output_shape(self, input_shape):
+#         return input_shape[0], input_shape[1], self.dimensions
 
 
 class AbstractArgumentExtractor:
@@ -275,12 +271,12 @@ class AbstractArgumentExtractor:
 
     def init_model(self, parses):
         self.vocab = get_vocab(parses)
-        # embeddings = load_embedding_matrix('/data/word_vectors/glove.6B.300d.txt', self.vocab, 300)
-        # self.embd = Embedding(len(self.vocab), 300,
-        #                       weights=[embeddings],
-        #                       input_length=self.window_length,
-        #                       trainable=False)
-        self.embd = ElmoEmbeddingLayer(self.vocab)
+        embeddings = load_embedding_matrix('/data/word_vectors/glove.6B.300d.txt', self.vocab, 300)
+        self.embd = Embedding(len(self.vocab), 300,
+                              weights=[embeddings],
+                              input_length=self.window_length,
+                              trainable=False)
+        # self.embd = ElmoEmbeddingLayer(self.vocab)
 
         self.model = BiLSTMx(self.embd, self.window_length, self.hidden_dim, self.rnn_dim,
                              self.no_rnn, self.no_dense, self.no_crf, 4)
@@ -310,7 +306,7 @@ class AbstractArgumentExtractor:
                                              save_weights_only=True))
             callbacks.append(CSVLogger(os.path.join(save_path, 'logs.csv')))
 
-        self.model.fit(X_train, y_train, X_val, y_val, epochs=epochs, batch_size=64, callbacks=callbacks)
+        self.model.fit(X_train, y_train, X_val, y_val, epochs=epochs, batch_size=128, callbacks=callbacks)
 
     def score_on_features(self, X, y):
         y_pred = np.concatenate(self.model.predict(X).argmax(-1))
@@ -369,21 +365,12 @@ class ArgumentExtractBiLSTMCRFwithConn(AbstractArgumentExtractor):
 
     def extract_arguments(self, words, relations, strides=1, max_distance=0.5):
         offset = self.window_length // 2
-        print(words)
         tokens = np.array([self.vocab.get(w.lower(), 1) for w in words])
-        print(tokens.flatten())
         conn_pos = [min([i[2] for i in r['Connective']['TokenList']]) for r in relations]
-        print(conn_pos)
         word_windows = extract_windows(tokens, self.window_length, strides, offset)
-        print(len(words))
-        print(word_windows.shape)
         y_hat = self.model.predict(word_windows, batch_size=512)
-        print(y_hat.shape)
-        for i, y in enumerate(y_hat):
-            print(i, y.argmax(-1))
         relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
         relations = [relations_hat[i] for i in conn_pos]
-        print(relations)
         return relations
 
 

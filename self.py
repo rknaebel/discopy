@@ -5,7 +5,7 @@ import ujson as json
 import numpy as np
 
 import discopy.evaluate.exact
-from discopy.parser import DiscourseParser
+from discopy.parsers.lin import LinParser
 from discopy.semi_utils import extract_discourse_relations, evaluate_parser, load_corpus
 from discopy.semi_utils import get_arguments
 from discopy.utils import init_logger
@@ -58,16 +58,16 @@ if __name__ == '__main__':
     parses_test = json.loads(open(os.path.join(args.conll, 'en.test/parses.json'), 'r').read())
 
     logger.info('init parser...')
-    parser = discopy.parser.DiscourseParser(n_estimators=args.estimators)
+    parser = discopy.parsers.lin.LinParser(n_estimators=args.estimators)
     parser_path = args.dir
 
     if args.base_dir and os.path.exists(os.path.join(args.base_dir, 'parser.joblib')):
         logger.info('load base model from ' + args.base_dir)
-        parser = discopy.parser.DiscourseParser.from_path(args.base_dir)
+        parser = discopy.parsers.lin.LinParser.from_path(args.base_dir)
         parser_path = args.base_dir
     elif os.path.exists(args.dir) and os.path.exists(os.path.join(args.dir, 'parser.joblib')):
         logger.info('load pre-trained parser...')
-        parser = discopy.parser.DiscourseParser.from_path(args.dir)
+        parser = discopy.parsers.lin.LinParser.from_path(args.dir)
         parser_path = args.dir
     else:
         logger.info('train parser...')

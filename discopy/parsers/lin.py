@@ -5,10 +5,10 @@ import joblib
 import nltk
 import numpy as np
 
-from discopy.labeling import LinArgumentExtractClassifier
+from discopy.labeling.extract.lin_arg_extract import LinArgumentExtractClassifier
 from discopy.labeling.argument_position import ArgumentPositionClassifier
 from discopy.labeling.connective import ConnectiveClassifier
-from discopy.parsers import get_token_list, get_raw_tokens
+from discopy.parsers.utils import get_token_list, get_raw_tokens
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 
@@ -73,6 +73,7 @@ class LinParser(object):
             parsed_relations = self.parse_doc(doc)
             for p in parsed_relations:
                 p['DocID'] = doc_id
+                p['ID'] = hash(p)
             relations.extend(parsed_relations)
 
         return relations
