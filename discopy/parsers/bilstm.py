@@ -7,7 +7,7 @@ import joblib
 import nltk
 
 from discopy.labeling.connective import ConnectiveClassifier
-from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTMCRF, ArgumentExtractBiLSTMCRFwithConn
+from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, ArgumentExtractBiLSTMwithConn
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 from discopy.utils import init_logger
@@ -26,6 +26,7 @@ def get_raw_tokens(doc_words, idxs):
     return " ".join([doc_words[i][0][0] for i in sorted(idxs)])
 
 
+# TODO use this class in other parsers as well!
 class Relation:
     class Span:
         def __init__(self):
@@ -178,10 +179,10 @@ class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
 
     def __init__(self, n_estimators=1, no_crf=False):
         super().__init__(n_estimators)
-        self.arg_labeler = ArgumentExtractBiLSTMCRF(window_length=self.window_length,
-                                                    hidden_dim=self.hidden_size,
-                                                    rnn_dim=self.rnn_size, no_rnn=False,
-                                                    no_dense=False, no_crf=no_crf, explicits_only=False)
+        self.arg_labeler = ArgumentExtractBiLSTM(window_length=self.window_length,
+                                                 hidden_dim=self.hidden_size,
+                                                 rnn_dim=self.rnn_size, no_rnn=False,
+                                                 no_dense=False, no_crf=no_crf, explicits_only=False)
 
     def train(self, pdtb, parses, pdtb_val, parses_val):
         logger.info('Train Argument Extractor...')
@@ -242,8 +243,8 @@ class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
 
     def __init__(self, n_estimators=1, no_crf=False):
         super().__init__(n_estimators)
-        self.arg_labeler = ArgumentExtractBiLSTMCRF(window_length=100, hidden_dim=128, rnn_dim=512, no_rnn=False,
-                                                    no_dense=False, no_crf=no_crf, explicits_only=True)
+        self.arg_labeler = ArgumentExtractBiLSTM(window_length=100, hidden_dim=128, rnn_dim=512, no_rnn=False,
+                                                 no_dense=False, no_crf=no_crf, explicits_only=True)
 
     def train(self, pdtb, parses, pdtb_val, parses_val):
         logger.info('Train Argument Extractor...')
@@ -327,108 +328,6 @@ class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
         relations = [r.to_dict() for r in relations]
         return relations
 
-    # def parse_doc(self, doc):
-    #     relations = []
-    #     inter_relations = set()
-    #     doc_words = [(w, s_i, w_i) for s_i, s in enumerate(doc['sentences']) for w_i, w in enumerate(s['words'])]
-    #
-    #     # ARGUMENT EXTRACTION
-    #     # TODO adjust max distance
-    #     arguments_pred = self.arg_labeler.extract_arguments([w[0][0] for w in doc_words], strides=1, max_distance=0.5)
-    #     # print('ArgPred', arguments_pred)
-    #     # print('Length', len(arguments_pred))
-    #     for r in arguments_pred:
-    #         if not r.conn:
-    #             continue
-    #         relation = {
-    #             'Connective': {},
-    #             'Arg1': {},
-    #             'Arg2': {},
-    #             'Type': 'Explicit',
-    #         }
-    #         sent_id = Counter(i[3] for i in get_token_list2(doc_words, r.conn)).most_common(1)[0][0]
-    #
-    #         conn = [i[2] for i in get_token_list2(doc_words, r.conn) if i[3] == sent_id]
-    #
-    #         relation['Connective']['TokenList'] = get_token_list2(doc_words, conn)
-    #         relation['Connective']['RawText'] = get_raw_tokens(doc_words, conn)
-    #         relation['Arg1']['TokenList'] = get_token_list2(doc_words, r.arg1)
-    #         relation['Arg1']['RawText'] = get_raw_tokens(doc_words, r.arg1)
-    #         relation['Arg2']['TokenList'] = get_token_list2(doc_words, r.arg2)
-    #         relation['Arg2']['RawText'] = get_raw_tokens(doc_words, r.arg2)
-    #         relations.append(relation)
-    #         print(relation)
-    #
-    #     # EXPLICIT SENSE
-    #     for relation in relations:
-    #         sent_id = min([i[3] for i in relation['Connective']['TokenList']])
-    #         try:
-    #             ptree = nltk.ParentedTree.fromstring(doc['sentences'][sent_id]['parsetree'])
-    #         except ValueError:
-    #             logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
-    #             continue
-    #         if not ptree.leaves():
-    #             logger.warning('Failed on empty tree')
-    #             continue
-    #
-    #         explicit, explicit_c = self.explicit_clf.get_sense(relation, ptree)
-    #         relation['Sense'] = [explicit]
-    #         if sent_id - max(i[3] for i in relation['Arg1']['TokenList']) == 1:
-    #             inter_relations.add(sent_id)
-    #
-    #     token_id = 0
-    #     sent_lengths = [0]
-    #     for sent_id, sent in enumerate(doc['sentences']):
-    #         sent_lengths.append(len(sent['words']))
-    #         if sent_id == 0 or sent_id in inter_relations:
-    #             token_id += len(sent['words'])
-    #             continue
-    #
-    #         try:
-    #             ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
-    #             ptree_prev = nltk.ParentedTree.fromstring(doc['sentences'][sent_id - 1]['parsetree'])
-    #             dtree = sent['dependencies']
-    #             dtree_prev = doc['sentences'][sent_id - 1]['dependencies']
-    #         except ValueError:
-    #             logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
-    #             continue
-    #
-    #         if not ptree.leaves() or not ptree_prev.leaves():
-    #             continue
-    #         arg1_idxs = list(range(sum(sent_lengths[:-2]), sum(sent_lengths[:-1])))
-    #         arg2_idxs = list(range(sum(sent_lengths[:-1]), sum(sent_lengths)))
-    #         relation = {
-    #             'Connective': {
-    #                 'TokenList': []
-    #             },
-    #             'Arg1': {
-    #                 'TokenList': get_token_list2(doc_words, arg1_idxs)
-    #                 # 'TokenList': get_token_list2(doc_words, list(range(len(ptree_prev.leaves()))), sent_id - 1,
-    #                 #                             sum(sent_lengths[:-2]))
-    #             },
-    #             'Arg2': {
-    #                 'TokenList': get_token_list2(doc_words, arg2_idxs)
-    #                 # 'TokenList': get_token_list2(doc_words, list(range(len(ptree.leaves()))), sent_id,
-    #                 #                             sum(sent_lengths[:-1]))
-    #             },
-    #             'Type': 'Implicit',
-    #             'Sense': [],
-    #         }
-    #         relation['Arg1']['RawText'] = get_raw_tokens(doc_words, arg1_idxs)
-    #         relation['Arg2']['RawText'] = get_raw_tokens(doc_words, arg2_idxs)
-    #         arg1 = [doc_words[i][0][0] for i in arg1_idxs]
-    #         arg2 = [doc_words[i][0][0] for i in arg2_idxs]
-    #         sense, sense_c = self.non_explicit_clf.get_sense(ptree_prev, ptree, dtree_prev, dtree, arg1, arg2)
-    #         relation['Sense'] = [sense]
-    #         relations.append(relation)
-    #
-    #         token_id += len(sent['words'])
-    #
-    #     # for r in relations:
-    #     #     r['Confidence'] = np.mean(list(r['Confidences'].values()))
-    #
-    #     return relations
-
 
 class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
     """
@@ -438,11 +337,11 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
     def __init__(self, n_estimators=1, no_crf=False):
         super().__init__(n_estimators)
         self.connective_clf = ConnectiveClassifier(n_estimators=n_estimators)
-        self.arg_labeler = ArgumentExtractBiLSTMCRFwithConn(window_length=self.window_length,
-                                                            hidden_dim=self.hidden_size,
-                                                            rnn_dim=self.rnn_size,
-                                                            no_rnn=False,
-                                                            no_dense=False, no_crf=no_crf)
+        self.arg_labeler = ArgumentExtractBiLSTMwithConn(window_length=self.window_length,
+                                                         hidden_dim=self.hidden_size,
+                                                         rnn_dim=self.rnn_size,
+                                                         no_rnn=False,
+                                                         no_dense=False, no_crf=no_crf)
 
     def train(self, pdtb, parses, pdtb_val, parses_val):
         logger.info('Train Connective Classifier...')

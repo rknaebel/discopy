@@ -1,6 +1,8 @@
 import os
+from discopy.semi_utils import get_arguments
+args = get_arguments()
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 import ujson as json
 
@@ -8,10 +10,8 @@ import discopy.evaluate.exact
 from discopy.parsers.lin import LinParser
 from discopy.parsers.gosh import GoshParser
 from discopy.parsers.bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
-from discopy.semi_utils import get_arguments
 from discopy.utils import init_logger
 
-args = get_arguments()
 
 os.makedirs(args.dir, exist_ok=True)
 
@@ -62,10 +62,6 @@ if __name__ == '__main__':
     parser = parsers.get(args.parser, LinParser)
     parser_path = args.dir
 
-    # if args.base_dir and os.path.exists(os.path.join(args.base_dir, 'parser.joblib')):
-    #     logger.info('load base model from ' + args.base_dir)
-    #     parser = discopy.parser.DiscourseParser.from_path(args.base_dir)
-    #     parser_path = args.base_dir
     if args.train:
         logger.info('Train end-to-end Parser...')
         parser.train(pdtb_train, parses_train, pdtb_val, parses_val)
@@ -85,11 +81,6 @@ if __name__ == '__main__':
         with open(args.out, 'w') as fh:
             for doc_id, doc in pdtb_pred.items():
                 for relation in doc['Relations']:
-                    print(relation)
                     fh.write('{}\n'.format(json.dumps(relation)))
 
     all_results = evaluate_parser(pdtb_test, pdtb_pred, threshold=args.threshold)
-    # if args.out:
-    #     with open('all.'+args.out, 'w') as fh:
-    #         fh.writelines('\n'.join(['{}'.format(json.dumps(res)) for doc_id, res in all_results.items()]))
-

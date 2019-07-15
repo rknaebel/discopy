@@ -330,7 +330,7 @@ class AbstractArgumentExtractor:
         self.score_on_features(X, y)
 
 
-class ArgumentExtractBiLSTMCRF(AbstractArgumentExtractor):
+class ArgumentExtractBiLSTM(AbstractArgumentExtractor):
     def __init__(self, window_length, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf, explicits_only=False):
         super().__init__(window_length, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf)
         self.explicits_only = explicits_only
@@ -354,7 +354,7 @@ class ArgumentExtractBiLSTMCRF(AbstractArgumentExtractor):
         return relations_hat
 
 
-class ArgumentExtractBiLSTMCRFwithConn(AbstractArgumentExtractor):
+class ArgumentExtractBiLSTMwithConn(AbstractArgumentExtractor):
     def __init__(self, window_length, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf):
         super().__init__(window_length, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf)
         self.path = 'bilstm_arg_{}_extract.h5'.format(
@@ -422,8 +422,8 @@ if __name__ == "__main__":
     # logger.info('Evaluation on TEST')
     # clf.score(pdtb_test, parses_test)
 
-    clf = ArgumentExtractBiLSTMCRFwithConn(window_length=window_length, hidden_dim=hidden_dim, rnn_dim=rnn_dim,
-                                           no_rnn=False, no_dense=False, no_crf=True)
+    clf = ArgumentExtractBiLSTMwithConn(window_length=window_length, hidden_dim=hidden_dim, rnn_dim=rnn_dim,
+                                        no_rnn=False, no_dense=False, no_crf=True)
     logger.info('Train Dense model')
     clf.fit(pdtb_train, parses_train, pdtb_val, parses_val, epochs=epochs)
     # clf.save(path)
@@ -432,8 +432,8 @@ if __name__ == "__main__":
     logger.info('Evaluation on TEST')
     clf.score(pdtb_test, parses_test)
 
-    clf = ArgumentExtractBiLSTMCRF(window_length=window_length, hidden_dim=hidden_dim, rnn_dim=rnn_dim,
-                                   no_rnn=False, no_dense=False, no_crf=True, explicits_only=True)
+    clf = ArgumentExtractBiLSTM(window_length=window_length, hidden_dim=hidden_dim, rnn_dim=rnn_dim,
+                                no_rnn=False, no_dense=False, no_crf=True, explicits_only=True)
     logger.info('Train Dense model')
     clf.fit(pdtb_train, parses_train, pdtb_val, parses_val, epochs=epochs)
     # clf.save(path)
@@ -442,8 +442,8 @@ if __name__ == "__main__":
     logger.info('Evaluation on TEST')
     clf.score(pdtb_test, parses_test)
 
-    clf = ArgumentExtractBiLSTMCRF(window_length=window_length, hidden_dim=hidden_dim, rnn_dim=rnn_dim,
-                                   no_rnn=False, no_dense=False, no_crf=True, explicits_only=False)
+    clf = ArgumentExtractBiLSTM(window_length=window_length, hidden_dim=hidden_dim, rnn_dim=rnn_dim,
+                                no_rnn=False, no_dense=False, no_crf=True, explicits_only=False)
     logger.info('Train Dense model')
     clf.fit(pdtb_train, parses_train, pdtb_val, parses_val, epochs=epochs)
     # clf.save(path)

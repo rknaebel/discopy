@@ -13,6 +13,8 @@ def get_arguments():
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument("--mode", help="",
                                  default='self')
+    argument_parser.add_argument("--gpu", help="",
+                                 default='0')
     argument_parser.add_argument("--dir", help="",
                                  default='tmp')
     argument_parser.add_argument("--out", help="",
