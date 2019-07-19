@@ -1,5 +1,6 @@
 import logging
 import os
+from collections import Counter
 
 import numpy as np
 from keras.regularizers import l2
@@ -15,11 +16,25 @@ from keras.layers import CuDNNLSTM as LSTM
 import tensorflow as tf
 
 
+def get_class_weights(y, smooth_factor=0.0):
+    """
+    Returns the weights for each class based on the frequencies of the samples
+    :param smooth_factor: factor that smooths extremely uneven weights
+    :param y: list of true labels (the labels must be hashable)
+    :return: dictionary with the weight for each class
+    """
+    counter = Counter(y)
+    if smooth_factor > 0.0:
+        p = max(counter.values()) * smooth_factor
+        for k in counter.keys():
+            counter[k] += p
+    majority = max(counter.values())
+    return {cls: float(majority/count) for cls, count in counter.items()}
+
+
 def get_balanced_class_weights(y):
     y = y.argmax(-1).flatten()
-    classes = np.unique(y)
-    class_weights = compute_class_weight('balanced', classes, y)
-    return {c: w for c, w in zip(classes, class_weights)}
+    return get_class_weights(y, 0.1)
 
 
 def class_weighted_loss(class_weights):
@@ -36,13 +51,7 @@ def class_weighted_loss(class_weights):
 
 class BiLSTMx:
 
-    def __init__(self, embd_layer, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf, nb_classes):
-        # learn_mode = 'join'
-        # test_mode = 'viterbi'
-        # learn_mode = 'marginal'
-        # test_mode = 'marginal'
-        # self.no_crf = no_crf
-
+    def __init__(self, embd_layer, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, nb_classes):
         x = Input(shape=(max_seq_len,), name='window-input')
         y = embd_layer(x)
         y = SpatialDropout1D(0.2)(y)
@@ -51,28 +60,16 @@ class BiLSTMx:
         if not no_dense:
             y = Dense(hidden_dim, activation='relu', name='hidden-dense', kernel_regularizer=l2(0.001))(y)
             y = Dropout(0.2)(y)
-        # if no_crf:
-        y1 = Dense(nb_classes, activation='softmax', name='args')(y)
-        # else:
-        #     raise NotImplementedError('CRF')
-        # y1 = CRF(nb_classes, test_mode=test_mode, learn_mode=learn_mode, name='args')(y)
+        y = Dense(nb_classes, activation='softmax', name='args')(y)
 
         self.x = x
-        self.y_args = y1
+        self.y = y
 
-        self.model = Model(self.x, self.y_args)
+        self.model = Model(self.x, self.y)
 
     def compile(self, class_weights):
-        # loss = {'args': crf_loss}
-        # metrics = {'args': crf_marginal_accuracy}
-
-        # if self.no_crf:
         self.model.compile(loss=class_weighted_loss(class_weights), optimizer='adam',
                            metrics=['accuracy'])
-        # else:
-        #     self.model.compile(optimizer="adam",
-        #                        loss=class_weighted_loss(class_weights),
-        #                        metrics=[crf_marginal_accuracy])
 
     def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size, callbacks):
         self.model.fit(x_train, y_train,
@@ -102,16 +99,16 @@ def load_embedding_matrix(vector_path, word_index, emb_dim):
     if os.path.exists(save_path):
         return np.load(save_path)
     embeddings_index = dict(get_coefs(*o.rstrip().rsplit(' ')) for o in open(vector_path, encoding='utf8'))
-    print('Found %s word vectors.' % len(embeddings_index))
+    logger.info('Found %s word vectors.' % len(embeddings_index))
 
     filled = 0
-    all_embs = np.stack(list(embeddings_index.values()))
+    all_embs = np.stack([e for e in embeddings_index.values() if len(e) == emb_dim])
     embedding_matrix = np.random.normal(all_embs.mean(), all_embs.std(), (len(word_index), emb_dim))
     for word, i in word_index.items():
         embedding_vector = embeddings_index.get(word)
         if embedding_vector is not None:
             embedding_matrix[i] = embedding_vector
             filled += 1
-    print('Filled {} of {} word vectors.'.format(filled, len(word_index)))
+    logger.info('Filled {} of {} word vectors.'.format(filled, len(word_index)))
     np.save(save_path, embedding_matrix)
     return embedding_matrix
