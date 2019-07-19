@@ -8,9 +8,8 @@ import nltk
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn_crfsuite import CRF
-from typing import List
 
-from discopy.utils import init_logger
+from discopy.utils import init_logger, encode_iob, decode_iob
 
 logger = logging.getLogger('discopy')
 
@@ -89,29 +88,6 @@ def generate_pdtb_features_gosh(pdtb, parses):
         arg1_features.append((X_arg1, labels_arg1))
         arg2_features.append((X_arg2, labels_arg2))
     return list(zip(*arg1_features)), list(zip(*arg2_features))
-
-
-def encode_iob(xs):
-    res = []
-    for i, label in enumerate(xs):
-        if label in ['Arg1', 'Arg2']:
-            if i == 0 or xs[i - 1] != label:
-                res.append('B-' + xs[i])
-            else:
-                res.append('I-' + xs[i])
-        else:
-            res.append(label)
-    return res
-
-
-def decode_iob(xs: List[str]):
-    res = []
-    for i, label in enumerate(xs):
-        if label[:2].endswith("-"):
-            res.append(label[2:])
-        else:
-            res.append(label)
-    return res
 
 
 class GoshArgumentExtract:

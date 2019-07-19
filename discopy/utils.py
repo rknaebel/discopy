@@ -1,6 +1,7 @@
 import copy
 import logging
 from collections import defaultdict, Counter
+from typing import List
 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -284,3 +285,26 @@ def bootstrap_dataset(pdtb, parses, n_straps=3, ratio=0.7, replace=True):
         strap_parses = {doc_id: doc for doc_id, doc in parses.items() if doc_id in strap_doc_ids}
         straps.append((strap_pdtb, strap_parses))
     return straps
+
+
+def encode_iob(xs):
+    res = []
+    for i, label in enumerate(xs):
+        if label in ['Arg1', 'Arg2']:
+            if i == 0 or xs[i - 1] != label:
+                res.append('B-' + xs[i])
+            else:
+                res.append('I-' + xs[i])
+        else:
+            res.append(label)
+    return res
+
+
+def decode_iob(xs: List[str]):
+    res = []
+    for i, label in enumerate(xs):
+        if label[:2].endswith("-"):
+            res.append(label[2:])
+        else:
+            res.append(label)
+    return res
