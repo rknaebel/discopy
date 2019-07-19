@@ -125,15 +125,6 @@ def extract_document_training_windows(document, vocab, size=100, positives_only=
             data = np.concatenate([pos, neg])
         else:
             data = pos
-    # elif not positives_only:
-    #     centroids_mask = np.zeros_like(hashes)
-    #     centroids_mask[:size] = 1
-    #     centroids_mask[-size:] = 1
-    #     non_centroids = np.arange(len(centroids_mask))[centroids_mask == 0]
-    #     neg = np.zeros((len(non_centroids), size, 2), dtype=int)
-    #     for i, centroid in enumerate(non_centroids):
-    #         neg[i, :, 0] = hashes[centroid - left_side:centroid + right_size]
-    #     data = neg
     else:
         return [], []
 
@@ -180,7 +171,6 @@ def predict_discourse_windows_for_id(tokens, windows, strides, offset, start_idx
     if start_idxs:
         for i, (w, s) in enumerate(zip(windows, start_idxs)):
             relations_hat.append(extract_relation_from_window(w, s, nb_tokens))
-            # print(relations_hat[-1])
     else:
         start_idx = -offset
         for i, w in enumerate(windows):
@@ -189,61 +179,46 @@ def predict_discourse_windows_for_id(tokens, windows, strides, offset, start_idx
     return relations_hat
 
 
+def major_merge_relations(relations):
+    lim = (len(relations) + 1) // 2  # increase by one to get the majority
+    arg1_ctr = Counter(a1 for r in relations for a1 in r.arg1)
+    arg2_ctr = Counter(a2 for r in relations for a2 in r.arg2)
+    conn_ctr = Counter(c for r in relations for c in r.conn)
+    relation = Relation()
+    for a1, a1_c in arg1_ctr.items():
+        if a1_c > lim:
+            relation.arg1.add(a1)
+    for a2, a2_c in arg2_ctr.items():
+        if a2_c > lim:
+            relation.arg2.add(a2)
+    for conn, conn_c in conn_ctr.items():
+        if conn_c > lim:
+            relation.conn.add(conn)
+    return relation
+
+
 def reduce_relation_predictions(relations, max_distance=0.5):
     if len(relations) == 0:
         return []
     combined = []
-    current = relations[0]
+    current = [relations[0]]
     distances = [relations[i].distance(relations[i + 1]) for i in range(len(relations) - 1)]
     for i, d in enumerate(distances):
         next_rel = relations[i + 1]
         if d < max_distance:
-            current = current | next_rel
+            current.append(next_rel)
         else:
             combined.append(current)
-            current = next_rel
+            current = [next_rel]
 
     # filter invalid relations: either argument is empty
+    combined = [[r for r in rr if r.arg1 and r.arg2] for rr in combined]
+    # TODO whats the best number of partial relations to depend on?
+    combined = [rr for rr in combined if len(rr) > 2]
+    combined = [major_merge_relations(rr) for rr in combined]
     combined = [r for r in combined if r.arg1 and r.arg2]
 
     return combined
-
-
-# class ElmoEmbeddingLayer(keras.layers.Layer):
-#     def __init__(self, vocab, **kwargs):
-#         self.dimensions = 1024
-#         self.trainable = True
-#         self.vocab = vocab
-#         super(ElmoEmbeddingLayer, self).__init__(**kwargs)
-#
-#     def build(self, input_shape):
-#         self.elmo = hub.Module('https://tfhub.dev/google/elmo/2', trainable=self.trainable,
-#                                name="{}_module".format(self.name))
-#         self.trainable_weights += K.tf.trainable_variables(scope="^{}_module/.*".format(self.name))
-#         self.word_mapping = [x[0] for x in self.vocab.items()]
-#         self.lookup_table = tf.contrib.lookup.index_to_string_table_from_tensor(self.word_mapping,
-#                                                                                 default_value="<UNK>")
-#         self.lookup_table.init.run(session=K.get_session())
-#         super(ElmoEmbeddingLayer, self).build(input_shape)
-#
-#     def call(self, x, mask=None):
-#         x = tf.cast(x, dtype=tf.int64)
-#         sequence_lengths = tf.cast(tf.count_nonzero(x, axis=1), dtype=tf.int32)
-#         strings = self.lookup_table.lookup(x)
-#         result = self.elmo(
-#             inputs={
-#                 "tokens": strings,
-#                 "sequence_len": sequence_lengths,
-#             },
-#             signature='tokens',
-#             as_dict=True)['elmo']
-#         return result
-#
-#     def compute_mask(self, inputs, mask=None):
-#         return K.not_equal(inputs, 0)
-#
-#     def compute_output_shape(self, input_shape):
-#         return input_shape[0], input_shape[1], self.dimensions
 
 
 class AbstractArgumentExtractor:
@@ -276,15 +251,8 @@ class AbstractArgumentExtractor:
                               weights=[embeddings],
                               input_length=self.window_length,
                               trainable=False)
-        # self.embd = ElmoEmbeddingLayer(self.vocab)
-
         self.model = BiLSTMx(self.embd, self.window_length, self.hidden_dim, self.rnn_dim,
-                             self.no_rnn, self.no_dense, self.no_crf, 4)
-
-        # self.model = Transformer(len(self.vocab), self.window_length, self.embd,
-        #                          256, 512, 8, 32, 32, layers=10, dropout=0.1)
-
-        self.model.summary()
+                             self.no_rnn, self.no_dense, 4)
 
     def fit(self, pdtb, parses, pdtb_val, parses_val, epochs=25, save_path=''):
         self.init_model(parses)
@@ -334,7 +302,6 @@ class ArgumentExtractBiLSTM(AbstractArgumentExtractor):
     def __init__(self, window_length, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf, explicits_only=False):
         super().__init__(window_length, hidden_dim, rnn_dim, no_rnn, no_dense, no_crf)
         self.explicits_only = explicits_only
-
         self.path = 'bilstm_all_{}_{}_extract.h5'.format(
             'dense' if self.no_crf else 'crf',
             int(self.explicits_only)
@@ -343,14 +310,10 @@ class ArgumentExtractBiLSTM(AbstractArgumentExtractor):
     def extract_arguments(self, words, strides=1, max_distance=0.5):
         offset = self.window_length // 2
         tokens = np.array([self.vocab.get(w.lower(), 1) for w in words])
-
         windows = extract_windows(tokens, self.window_length, strides, offset)
         y_hat = self.model.predict(windows, batch_size=512)
-
         relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
-
         relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
-
         return relations_hat
 
 
