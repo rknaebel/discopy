@@ -11,19 +11,9 @@ from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, ArgumentE
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 from discopy.utils import init_logger
+from discopy.parsers.utils import get_raw_tokens, get_token_list2
 
 logger = logging.getLogger('discopy')
-
-
-def get_token_list2(doc_words, tokens):
-    return [[int(doc_words[i][0][1]['CharacterOffsetBegin']),
-             int(doc_words[i][0][1]['CharacterOffsetEnd']),
-             int(i), int(doc_words[i][1]), int(doc_words[i][2])] for i in sorted(tokens)]
-
-
-def get_raw_tokens(doc_words, idxs):
-    # TODO fix whitespaces, depend on the character offsets
-    return " ".join([doc_words[i][0][0] for i in sorted(idxs)])
 
 
 # TODO use this class in other parsers as well!
