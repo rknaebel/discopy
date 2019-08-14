@@ -17,19 +17,36 @@ lemmatizer = nltk.stem.WordNetLemmatizer()
 stemmer = nltk.stem.SnowballStemmer('english')
 
 
-def get_gosh_features(ptree, indices, sense, offset):
-    features = []
+def get_gosh_features(ptree, dtree, indices, sense, offset):
+    features_sentence = []
+    for i, (d, n1, n2) in enumerate(dtree):
+        if d == 'root':
+            mv_position = i
+            break
+    else:
+        mv_position = 0
+    main_verb = ptree.pos()[mv_position][0]
+
     for i, (word, tag) in enumerate(ptree.pos()):
-        features.append({
+        tree_pos = ptree.treeposition_spanning_leaves(i, i+1)[:-1]
+        chain = '-'.join(ptree[tree_pos[:i+1]].label() for i in range(len(tree_pos)))
+        stem = stemmer.stem(word)
+
+        features_word = {
             'idx': offset + i,
             'BOS': i == 0,
             'word': word,
             'pos': tag,
             'lemma': lemmatizer.lemmatize(word),
-            'stem': stemmer.stem(word),
-            'conn': sense if offset + i in indices else ""
-        })
-    return features
+            'stem': stem,
+            'chain': chain,
+            'conn': sense if offset + i in indices else "",
+            'inflection': word[len(stem):],
+            'is_main_verb': i == mv_position,
+            'main_verb': main_verb
+        }
+        features_sentence.append(features_word)
+    return features_sentence
 
 
 def generate_pdtb_features_gosh(pdtb, parses):
@@ -58,7 +75,8 @@ def generate_pdtb_features_gosh(pdtb, parses):
                 ptree_i = nltk.ParentedTree.fromstring(s_i)
                 if not ptree_i.leaves():
                     continue
-                sent_features.extend(get_gosh_features(ptree_i, conn, relation['Sense'][0], offsets[sent_i]))
+                dtree_i = parses[doc_id]['sentences'][sent_i]['dependencies']
+                sent_features.extend(get_gosh_features(ptree_i, dtree_i, conn, relation['Sense'][0], offsets[sent_i]))
         except ValueError:
             continue
         except IndexError:
@@ -149,7 +167,8 @@ class GoshArgumentExtract:
             ptree_i._label = 'S'
             if not ptree_i.leaves():
                 continue
-            X.extend(get_gosh_features(ptree_i, conn, relation['Sense'][0], offsets[sent_i]))
+            dtree_i = doc['sentences'][sent_i]['dependencies']
+            X.extend(get_gosh_features(ptree_i, dtree_i, conn, relation['Sense'][0], offsets[sent_i]))
 
         indices = []
         for i in X:
