@@ -190,7 +190,7 @@ class LinArgumentExtractClassifier:
         (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(pdtb, parses)
         self.score_on_features(X_ss, y_ss, X_ps, y_ps)
 
-    def extract_arguments(self, ptree, relation):
+    def extract_arguments(self, ptree, relation, arg_pos):
         indices = [token[4] for token in relation['Connective']['TokenList']]
         chm = ConnHeadMapper()
         conn_head, _ = chm.map_raw_connective(relation['Connective']['RawText'])
@@ -200,7 +200,7 @@ class LinArgumentExtractClassifier:
         fs = get_features(conn_head, indices, ptree)
         X = [i[0] for i in fs]
         position = [i[1] for i in fs]
-        if relation['ArgPos'] == 'SS':
+        if arg_pos == 'SS':
             probs = self.ss_model.predict_proba(X)
             max_idx_sorted = probs.argsort(axis=0)
             arg1_max_idx, arg2_max_idx, _ = max_idx_sorted[-1]
@@ -227,7 +227,7 @@ class LinArgumentExtractClassifier:
                 logger.warning("Empty Arg1")
             if not arg2:
                 logger.warning("Empty Arg2")
-        elif relation['ArgPos'] == 'PS':
+        elif arg_pos == 'PS':
             probs = self.ps_model.predict_proba(X)
             arg2_max_idx, _ = probs.argmax(axis=0)
             arg2_prob, _ = probs.max(axis=0)

@@ -308,3 +308,81 @@ def decode_iob(xs: List[str]):
         else:
             res.append(label)
     return res
+
+
+class ParsedRelation:
+    class Span:
+        def __init__(self):
+            self.TokenList = []
+            self.RawText = ''
+
+        def get_sentence_ids(self):
+            return sorted(set(i[3] for i in self.TokenList))
+
+        def get_global_ids(self):
+            return sorted(set(i[2] for i in self.TokenList))
+
+        def get_local_ids(self):
+            return sorted(set(i[4] for i in self.TokenList))
+
+        def is_valid(self):
+            return len(self.TokenList) > 0
+
+    def __init__(self):
+        self.Connective = ParsedRelation.Span()
+        self.Arg1 = ParsedRelation.Span()
+        self.Arg2 = ParsedRelation.Span()
+        self.Type = ''
+        self.Sense = ''
+        self.ptree = None
+
+    def to_dict(self):
+        return {
+            'Connective': {
+                'TokenList': self.Connective.TokenList,
+                'RawText': self.Connective.RawText
+            },
+            'Arg1': {
+                'TokenList': self.Arg1.TokenList,
+                'RawText': self.Arg1.RawText
+            },
+            'Arg2': {
+                'TokenList': self.Arg2.TokenList,
+                'RawText': self.Arg2.RawText
+            },
+            'Type': self.Type,
+            'Sense': [self.Sense],
+            'ptree': self.ptree
+        }
+
+    def is_valid(self):
+        return self.Arg1.is_valid() and self.Arg2.is_valid()
+
+    def to_conll(self):
+        r = self.to_dict()
+        del r['ptree']
+        return r
+
+    def is_explicit(self):
+        return self.Connective.RawText != ''
+
+    def __str__(self):
+        return "Relation({} {} arg1:<{}> arg2:<{}> conn:<{}>)".format(
+            self.Type, self.Sense,
+            ",".join(map(str, self.Arg1.get_global_ids())),
+            ",".join(map(str, self.Arg2.get_global_ids())),
+            ",".join(map(str, self.Connective.get_global_ids()))
+        )
+
+    @staticmethod
+    def from_dict(d):
+        r = ParsedRelation()
+        r.Sense = d['Sense'][0]
+        r.Type = d['Type']
+        r.Connective.TokenList = d['Connective']['TokenList']
+        r.Connective.RawText = d['Connective']['RawText']
+        r.Arg1.TokenList = d['Arg1']['TokenList']
+        r.Arg1.RawText = d['Arg1']['RawText']
+        r.Arg2.TokenList = d['Arg2']['TokenList']
+        r.Arg2.RawText = d['Arg2']['RawText']
+        return r
