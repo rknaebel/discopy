@@ -173,7 +173,6 @@ class LinParser(object):
                 continue
             explicit, explicit_c = self.explicit_clf.get_sense(relation.to_dict(), ptree)
             relation.Sense = explicit
-            relation.ptree = None
         return relations
 
     def parse_implicit_arguments(self, doc, relations):

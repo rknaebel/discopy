@@ -23,6 +23,9 @@ setup(name='discopy-rknaebel',
       ],
       zip_safe=False,
       entry_points={
-          'console_scripts': ['discopy=main:main'],
+          'console_scripts': [
+              'discopy=main:main',
+              'discopy-parse=parse'
+          ],
       }
       )

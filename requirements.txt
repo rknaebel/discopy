@@ -4,3 +4,5 @@ ujson
 joblib
 sklearn
 sklearn-crfsuite
+spacy
+benepar
