@@ -18,8 +18,10 @@ setup(name='discopy-rknaebel',
           'nltk',
           'joblib',
           'sklearn',
-          'sklearn-crfsuite'
-          'ujson'
+          'sklearn-crfsuite',
+          'ujson',
+          'spacy',
+          'benepar'
       ],
       zip_safe=False,
       entry_points={
