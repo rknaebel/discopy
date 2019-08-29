@@ -16,7 +16,7 @@ argument_parser.add_argument("--dir", help="",
                              default='tmp')
 argument_parser.add_argument("--out", help="",
                              default='')
-argument_parser.add_argument("--fin", help="",
+argument_parser.add_argument("--src", help="",
                              default='')
 # argument_parser.add_argument("--parser", help="",
 #                              default='lin')
@@ -35,37 +35,43 @@ logger = init_logger()
 def parse_text(text):
     sentences = []
     offset = 0
-    doc = nlp(text)
-    sents = list(doc.sents)
-    for sent in sents:
-        # words
-        words = [
-            [t.text, {
-                'CharacterOffsetBegin': t.idx + offset,
-                'CharacterOffsetEnd': t.idx + len(t.text) + offset,
-                'Linkers': [],
-                'PartOfSpeech': t.tag_,
-                'NamedEntity': t.ent_type_,
-            }]
-            for t in sent
-        ]
+    text = [line.strip() for line in text.splitlines(keepends=True) if line.strip() and len(line.split(' ')) > 1]
+    for doc in nlp.pipe(text):
+        sents = list(doc.sents)
+        for sent in sents:
+            # words
+            words = [
+                [t.text, {
+                    'CharacterOffsetBegin': t.idx + offset,
+                    'CharacterOffsetEnd': t.idx + len(t.text) + offset,
+                    'Linkers': [],
+                    'PartOfSpeech': t.tag_,
+                    'NamedEntity': t.ent_type_,
+                }]
+                for t in sent
+            ]
 
-        # dependencies
-        d_map = {
-            'compound': 'nn'
-        }
+            # dependencies
+            d_map = {
+                'compound': 'nn'
+            }
 
-        sentences.append({
-            'words': words,
-            'parsetree': sent._.parse_string,
-            'dependencies': [(
-                d_map.get(t.dep_, t.dep_),
-                "{}-{}".format(t.head.text, t.head.i + 1),
-                "{}-{}".format(t.text, t.i + 1))
-                for t in sent]
-        })
-        offset += len(sent.string)
-    return {'sentences': sentences}
+            sentences.append({
+                'words': words,
+                'parsetree': sent._.parse_string,
+                'dependencies': [(
+                    d_map.get(t.dep_, t.dep_),
+                    "{}-{}".format(t.head.text, t.head.i + 1),
+                    "{}-{}".format(t.text, t.i + 1))
+                    for t in sent],
+                'sentence': sent.string,
+                'sentOffset': sent[0].idx
+            })
+            offset += len(sent.string)
+    return {
+        'text': text,
+        'sentences': sentences
+    }
 
 
 def main():
@@ -75,8 +81,8 @@ def main():
     logger.info('Load pre-trained Parser...')
     parser.load(args.dir)
 
-    if args.fin:
-        dfile = open(args.fin, 'r').read()
+    if args.src:
+        dfile = open(args.src, 'r').read()
     else:
         dfile = sys.stdin.read()
 
