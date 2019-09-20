@@ -11,6 +11,14 @@ def get_root_path(clause) -> str:
     return "-".join(path)
 
 
+def get_compressed_chain(chain):
+    chain_compressed = chain[:1]
+    for i in chain[1:]:
+        if chain_compressed[-1] != i:
+            chain_compressed.append(i)
+    return chain_compressed
+
+
 def get_clause_context(clause) -> str:
     clause_pos = clause.label()
     clause_parent_pos = clause.parent().label() if clause.parent() else 'NULL'
@@ -122,7 +130,7 @@ def get_pos_features(ptree, leaf_index, head, position):
     lca_loc = lca(ptree, leaf_index)
     conn_tag = ptree[lca_loc].label()
 
-    if other_position >= 0:
+    if 0 <= other_position < len(ptree.leaves()):
         word, pos = pl[other_position]
     else:
         word = pos = 'NONE'
@@ -138,3 +146,14 @@ def get_index_tree(ptree):
         tree_location = tree.leaf_treeposition(idx)
         tree[tree_location[:-1]][0] = idx
     return tree
+
+
+def get_sibling_label(ptree, direction):
+    if direction == 'left':
+        sibling = ptree.left_sibling()
+    elif direction == 'right':
+        sibling = ptree.right_sibling()
+    if sibling:
+        return sibling.label()
+    else:
+        return 'NONE'

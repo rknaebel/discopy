@@ -8,12 +8,12 @@ from typing import Dict, List
 import nltk
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.feature_selection import VarianceThreshold, SelectKBest, mutual_info_classif
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import cohen_kappa_score, precision_recall_fscore_support, accuracy_score
 from sklearn.pipeline import Pipeline
 
-from discopy.conn_head_mapper import ConnHeadMapper
+from discopy.features import get_compressed_chain, get_pos_features, get_sibling_label
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives, \
     init_logger
 
@@ -22,99 +22,67 @@ logger = logging.getLogger('discopy')
 lemmatizer = nltk.stem.WordNetLemmatizer()
 
 
-def match_connectives(sentence, word_idx) -> list:
-    sentence = [w[0].lower() for w in sentence]
-    word = sentence[word_idx]
-    if word in single_connectives:
-        return [word]
-    elif word in multi_connectives_first:
-        if word_idx == (len(sentence) - 1):
-            if word in ['as', 'before', 'for', 'if', 'so']:
-                return [word]
-            else:
-                return []
-
-        for multi_conn in multi_connectives:
-            if (word_idx + len(multi_conn)) < len(sentence) and all(
-                    c == sentence[word_idx + i] for i, c in enumerate(multi_conn)):
-                return multi_conn
+def get_connective_candidates(sentence):
+    chosen_indices = set()
+    candidates = []
+    sentence = [w.lower() for w, wd in sentence]
+    for word_idx, word in enumerate(sentence):
+        if word_idx in chosen_indices:
+            continue
 
         for conn in distant_connectives:
             if word == conn[0]:
                 try:
                     i = sentence.index(conn[1], word_idx)
-                    return sentence[word_idx:i - word_idx]
+                    candidates.append([(word_idx, conn[0]), (i, conn[1])])
+                    break
                 except ValueError:
                     continue
-    return []
+
+        if word in multi_connectives_first:
+            for multi_conn in multi_connectives:
+                if (word_idx + len(multi_conn)) < len(sentence) and all(
+                        c == sentence[word_idx + i] for i, c in enumerate(multi_conn)):
+                    chosen_indices.update([word_idx + i for i in range(len(multi_conn))])
+                    candidates.append([(word_idx + i, c) for i, c in enumerate(multi_conn)])
+                    break
+
+        if word in single_connectives:
+            chosen_indices.add(word_idx)
+            candidates.append([(word_idx, word)])
+
+    return candidates
 
 
 def get_features(ptree, leaf_index):
     leave_list = ptree.leaves()
     lca_loc = ptree.treeposition_spanning_leaves(leaf_index[0], leaf_index[-1] + 1)[:-1]
-    if not lca_loc:
-        lca_loc = (0,)
 
-    selfcategory = ptree[lca_loc].label()
-    parentcategory = ptree[lca_loc].parent().label()
+    self_category = ptree[lca_loc].label()
+    parent_category = ptree[lca_loc].parent().label() if lca_loc else self_category
 
-    r2l = [ptree[lca_loc[:i + 1]].label() for i in range(len(lca_loc))]
+    left_sibling = get_sibling_label(ptree[lca_loc], 'left')
+    right_sibling = get_sibling_label(ptree[lca_loc], 'right')
 
     labels = {n.label() for n in ptree.subtrees(lambda t: t.height() > 2)}
+    bool_vp = 'VP' in labels
+    bool_trace = 'T' in labels
 
-    leftSibling = ptree[lca_loc].left_sibling()
-    if leftSibling:
-        leftSibling = leftSibling.label()
-    else:
-        leftSibling = 'NONE'
+    c = ' '.join(leave_list[leaf_index[0]:leaf_index[-1] + 1]).lower()
+    prev, prev_conn, prev_pos, prev_pos_conn_pos = get_pos_features(ptree, leaf_index, c, -1)
+    next, next_conn, next_pos, next_pos_conn_pos = get_pos_features(ptree, leaf_index, c, 1)
+    prev = lemmatizer.lemmatize(prev)
+    next = lemmatizer.lemmatize(next)
 
-    rightSibling = ptree[lca_loc].right_sibling()
-    rightVP = 'VP' in labels
-    rightTR = 'T' in labels
-    if rightSibling:
-        rightSibling = rightSibling.label()
-    else:
-        rightSibling = 'NONE'
+    r2l = [ptree[lca_loc[:i + 1]].label() for i in range(len(lca_loc))]
+    r2lcomp = get_compressed_chain(r2l)
 
-    prev = leaf_index[0] - 1
-    next = leaf_index[len(leaf_index) - 1] + 1
-
-    pl = ptree.pos()
-    cPOS = selfcategory
-    c = ' '.join(leave_list[leaf_index[0]:leaf_index[-1] + 1])
-    c = c.lower()
-
-    if prev >= 0:
-        prevC = ','.join([lemmatizer.lemmatize(pl[prev][0]), c])
-        prevPOS = pl[prev][1]
-        prevPOScPOS = ','.join([pl[prev][1], cPOS])
-    else:
-        prevC = ','.join(['NONE', c])
-        prevPOS = 'NONE'
-        prevPOScPOS = ','.join(['NONE', cPOS])
-
-    if next < len(leave_list):
-        nextC = ','.join([lemmatizer.lemmatize(pl[next][0]), c])
-        nextPOS = pl[next][1]
-        nextPOScPOS = [pl[next][1], cPOS]
-        nextPOScPOS = ','.join(nextPOScPOS)
-    else:
-        nextC = ['NONE', c]
-        nextC = ','.join(nextC)
-        nextPOS = 'NONE'
-        nextPOScPOS = ['NONE', cPOS]
-        nextPOScPOS = ','.join(nextPOScPOS)
-
-    # remove repeating labels
-    r2lcomp = r2l[:1]
-    for i in r2l[1:]:
-        if r2lcomp[-1] != i:
-            r2lcomp.append(i)
-
-    feat = {'connective': c, 'connectivePOS': cPOS, 'prevWord': prevC, 'prevPOSTag': prevPOS,
-            'prevPOS+cPOS': prevPOScPOS, 'nextWord': nextC, 'nextPOSTag': nextPOS, 'cPOS+nextPOS': nextPOScPOS,
-            'root2LeafCompressed': ','.join(r2lcomp), 'root2Leaf': ','.join(r2l), 'leftSibling': leftSibling,
-            'rightSibling': rightSibling, 'parentCategory': parentcategory, 'boolVP': rightVP, 'boolTrace': rightTR}
+    feat = {'connective': c, 'connectivePOS': self_category,
+            'prevWord': prev, 'prevPOSTag': prev_conn, 'prevPOS+cPOS': prev_pos_conn_pos,
+            'nextWord': next, 'nextPOSTag': next_pos, 'cPOS+nextPOS': next_pos_conn_pos,
+            'root2LeafCompressed': ','.join(r2lcomp), 'root2Leaf': ','.join(r2l),
+            'left_sibling': left_sibling, 'right_sibling': right_sibling,
+            'parentCategory': parent_category, 'boolVP': bool_vp, 'boolTrace': bool_trace}
 
     return feat
 
@@ -127,11 +95,10 @@ def group_by_doc_id(pdtb: list) -> Dict[str, list]:
 
 
 def generate_pdtb_features(pdtb, parses):
-    chm = ConnHeadMapper()
     features = []
     pdtb = group_by_doc_id(pdtb)
     for doc_id, doc in parses.items():
-        for sentence in doc['sentences']:
+        for sent_i, sentence in enumerate(doc['sentences']):
             try:
                 parsetree = nltk.ParentedTree.fromstring(sentence['parsetree'])
             except ValueError:
@@ -139,34 +106,14 @@ def generate_pdtb_features(pdtb, parses):
             if not parsetree.leaves() or doc_id not in pdtb:
                 continue
             doc_relations = pdtb[doc_id]
-            words = sentence['words']  # a word is a complex object containing information about offset etc
-            for word_idx, (word, wordDictionary) in enumerate(words):
-                connective_candidate = match_connectives(words, word_idx)
-
-                if connective_candidate:
-                    skip = len(connective_candidate) - 1
-                    word = word.lower()
-                    cOBWord = wordDictionary['CharacterOffsetBegin']
-                    cOEWord = wordDictionary['CharacterOffsetEnd']
-
-                    tokenNo = list(range(word_idx, word_idx + skip + 1))
-                    # check all relations in pdtb for this document
-                    for relation in doc_relations:
-                        connective, _ = chm.map_raw_connective(relation['Connective']['RawText'])
-                        cOBConnective = relation['Connective']['TokenList'][0][0]
-                        cOEConnective = relation['Connective']['TokenList'][-1][1]
-                        if cOBConnective <= cOBWord and cOEWord <= cOEConnective:
-                            l = [string.lower() for string in connective.split()]
-                            if (word in l):
-                                features.append((get_features(parsetree, tokenNo), 1))
-                                break
-                    else:
-                        try:
-                            # use connective candidate as negative example if there is no relation marked in PDTB
-                            features.append((get_features(parsetree, tokenNo), 0))
-                        # TODO remove later after fixing data pre-processing
-                        except IndexError:
-                            print(doc_id, connective_candidate, skip, tokenNo, word_idx)
+            conns_sent = {'-'.join([str(t[4]) for t in r['Connective']['TokenList']]) for r in doc_relations if
+                          sent_i in [t[3] for t in r['Connective']['TokenList']]}
+            for connective_candidate in get_connective_candidates(sentence['words']):
+                conn_idxs = [i for i, c in connective_candidate]
+                if '-'.join([str(i) for i, c in connective_candidate]) in conns_sent:
+                    features.append((get_features(parsetree, conn_idxs), 1))
+                else:
+                    features.append((get_features(parsetree, conn_idxs), 0))
     return list(zip(*features))
 
 
@@ -176,7 +123,6 @@ class ConnectiveClassifier:
             self.model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model', BaggingClassifier(
                     base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
                                                  n_jobs=-1, class_weight='balanced', random_state=0),
@@ -186,7 +132,6 @@ class ConnectiveClassifier:
             self.model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model',
                  SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
                                class_weight='balanced', random_state=0))
@@ -216,16 +161,17 @@ class ConnectiveClassifier:
         self.score_on_features(X, y)
 
     def get_connective(self, parsetree, sentence, word_idx) -> (List[str], float):
-        candidate = match_connectives(sentence, word_idx)
-        if not candidate:
-            return [], 1.0
-        else:
-            x = get_features(parsetree, list(range(word_idx, word_idx + len(candidate))))
-            probs = self.model.predict_proba([x])[0]
-            if probs.argmax() == 0:
-                return [], probs[0]
-            else:
-                return candidate, probs[1]
+        candidates = get_connective_candidates(sentence)
+        for candidate in candidates:
+            conn_idxs = [i for i, c in candidate]
+            if word_idx == conn_idxs[0]:
+                x = get_features(parsetree, conn_idxs)
+                probs = self.model.predict_proba([x])[0]
+                if probs.argmax() == 0:
+                    return [], probs[0]
+                else:
+                    return candidate, probs[1]
+        return [], 0.0
 
 
 if __name__ == "__main__":
@@ -244,4 +190,3 @@ if __name__ == "__main__":
     clf.score(pdtb_train, parses_train)
     logger.info('Evaluation on TEST')
     clf.score(pdtb_val, parses_val)
-    clf.save('../tmp')

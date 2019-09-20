@@ -5,4 +5,5 @@ joblib
 sklearn
 sklearn-crfsuite
 spacy
+tensorflow
 benepar

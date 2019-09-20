@@ -33,7 +33,7 @@ subordinating_connective = {'after', 'although', 'as', 'as if', 'as long as', 'a
 #
 # connective
 #
-single_connectives = {'accordingly', 'additionally', 'after', 'afterward', 'also', 'alternatively',
+single_connectives = {'accordingly', 'additionally', 'after', 'afterward', 'afterwards', 'also', 'alternatively',
                       'although', 'and', 'because', 'besides', 'but', 'consequently', 'conversely', 'earlier',
                       'else', 'except', 'finally', 'further', 'furthermore', 'hence', 'however', 'indeed',
                       'instead', 'later', 'lest', 'likewise', 'meantime', 'meanwhile', 'moreover',
@@ -44,7 +44,6 @@ single_connectives = {'accordingly', 'additionally', 'after', 'afterward', 'also
                       'while', 'yet'}
 
 multi_connectives = list(map(lambda s: s.split(' '), [
-    'as a result',
     'as a result',
     'as an alternative',
     'as if',
@@ -57,7 +56,7 @@ multi_connectives = list(map(lambda s: s.split(' '), [
     'before',
     'by comparison',
     'by contrast',
-    # 'by',
+    'by then',
     'for example',
     'for instance',
     'for',
@@ -148,10 +147,11 @@ class Relation:
         return "({},{},{})".format(list(self.arg1), list(self.arg2), list(self.conn))
 
     def distance(self, other):
+        d_args = jaccard_distance(self.arg1 | self.arg2, other.arg1 | other.arg2)
         d_arg1 = jaccard_distance(self.arg1, other.arg1)
         d_conn = jaccard_distance(self.conn, other.conn)
         d_arg2 = jaccard_distance(self.arg2, other.arg2)
-        return (d_arg1 + d_arg2 + d_conn) / 3
+        return sum([d_args, d_arg1, d_arg2, d_conn]) / 4
 
     @staticmethod
     def from_conll(r):

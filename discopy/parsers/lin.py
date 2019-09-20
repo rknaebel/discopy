@@ -91,10 +91,12 @@ class LinParser(object):
             except ValueError:
                 logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
                 token_id += sent_len
+                sent_offset += sent_len
                 continue
             if not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 token_id += sent_len
+                sent_offset += sent_len
                 continue
 
             current_token = 0
@@ -108,13 +110,13 @@ class LinParser(object):
                     token_id += 1
                     current_token += 1
                     continue
-                conn_idxs = [token_id + i for i in range(len(connective))]
+                conn_idxs = [sent_offset + i for i, c in connective]
                 relation.Connective.TokenList = get_token_list2(doc_words, conn_idxs)
                 relation.Connective.RawText = get_raw_tokens2(doc_words, conn_idxs)
 
                 relations.append(relation)
-                token_id += len(connective)
-                current_token += len(connective)
+                token_id += 1
+                current_token += 1
             sent_offset += sent_len
         return relations
 
@@ -156,7 +158,7 @@ class LinParser(object):
                 relation.Arg2.RawText = get_raw_tokens2(doc_words, arg2, sent_id)
             else:
                 logger.error('Unknown Argument Position: ' + arg_pos)
-                raise ValueError('Unknown Argument Position')
+                # raise ValueError('Unknown Argument Position')
 
         return [r for r in relations if r.is_valid()]
 

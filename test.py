@@ -1,15 +1,19 @@
 import os
+
+from discopy.data.conll16 import get_conll_dataset
 from discopy.semi_utils import get_arguments
+
 args = get_arguments()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 import ujson as json
+from tqdm import tqdm
 
 import discopy.evaluate.exact
-from discopy.parsers.lin import LinParser
+from discopy.parsers.lin import LinParser, LinArgumentParser
 from discopy.parsers.gosh import GoshParser
-from discopy.parsers.bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
+# from discopy.parsers.bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
 from discopy.utils import init_logger
 
 
@@ -19,7 +23,9 @@ logger = init_logger(os.path.join(args.dir, 'self.log'))
 
 
 def extract_discourse_relations(parser, parses):
-    preds = [extract_discourse_relation(doc_id, doc, parser) for doc_id, doc in parses.items()]
+    preds = []
+    for doc_id, doc in tqdm(parses.items()):
+        preds.append(extract_discourse_relation(doc_id, doc, parser))
     return {doc['DocID']: doc for doc in preds}
 
 
@@ -42,21 +48,18 @@ def evaluate_parser(pdtb_gold, pdtb_pred, threshold=0.7):
 
 parsers = {
     'lin': LinParser(),
+    'lin-arg': LinArgumentParser(),
     'gosh': GoshParser(),
-    'bilstm1': BiLSTMDiscourseParser1(),
-    'bilstm2': BiLSTMDiscourseParser2(),
-    'bilstm3': BiLSTMDiscourseParser3(),
+    # 'bilstm1': BiLSTMDiscourseParser1(),
+    # 'bilstm2': BiLSTMDiscourseParser2(),
+    # 'bilstm3': BiLSTMDiscourseParser3(),
 }
 
 if __name__ == '__main__':
-    pdtb_train = [json.loads(s) for s in open(os.path.join(args.conll, 'en.train/relations.json'), 'r')]
-    parses_train = json.loads(open(os.path.join(args.conll, 'en.train/parses.json'), 'r').read())
+    parses_train, pdtb_train = get_conll_dataset(args.conll, 'en.train', load_trees=False, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(args.conll, 'en.dev', load_trees=False, connective_mapping=True)
+    parses_test, pdtb_test = get_conll_dataset(args.conll, 'en.test', load_trees=False, connective_mapping=True)
 
-    pdtb_val = [json.loads(s) for s in open(os.path.join(args.conll, 'en.dev/relations.json'), 'r')]
-    parses_val = json.loads(open(os.path.join(args.conll, 'en.dev/parses.json'), 'r').read())
-
-    pdtb_test = [json.loads(s) for s in open(os.path.join(args.conll, 'en.test/relations.json'), 'r')]
-    parses_test = json.loads(open(os.path.join(args.conll, 'en.test/parses.json'), 'r').read())
 
     logger.info('Init Parser...')
     parser = parsers.get(args.parser, LinParser)
