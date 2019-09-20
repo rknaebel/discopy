@@ -7,12 +7,11 @@ import nltk
 from nltk.tree import ParentedTree
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, cohen_kappa_score
 from sklearn.pipeline import Pipeline
 
-import discopy.conn_head_mapper
 from discopy.features import get_connective_sentence_position, lca, get_pos_features
 from discopy.utils import init_logger
 
@@ -21,24 +20,22 @@ logger = logging.getLogger('discopy')
 lemmatizer = nltk.stem.WordNetLemmatizer()
 
 
-def get_features(ptree: ParentedTree, connective: str, leaf_index: list):
-    chm = discopy.conn_head_mapper.ConnHeadMapper()
-    head, connective_head_index = chm.map_raw_connective(connective)
-    connective_head_index = [leaf_index[i] for i in connective_head_index]
-
+def get_features(ptree: ParentedTree, conn: str, leaf_index: list):
     lca_loc = lca(ptree, leaf_index)
-    conn_tag = ptree[lca_loc].label()
-    conn_pos_relative = get_connective_sentence_position(connective_head_index, ptree)
+    conn_pos = ptree[lca_loc].label()
+    conn_pos_relative = get_connective_sentence_position(leaf_index, ptree)
 
-    prev, prev_conn, prev_pos, prev_pos_conn_pos = get_pos_features(ptree, leaf_index, head, -1)
-    prev2, prev2_conn, prev2_pos, prev2_pos_conn_pos = get_pos_features(ptree, leaf_index, head, -2)
+    prev, prev_conn, prev_pos, prev_pos_conn_pos = get_pos_features(ptree, leaf_index, conn, -1)
+    prev2, prev2_conn, prev2_pos, prev2_pos_conn_pos = get_pos_features(ptree, leaf_index, conn, -2)
 
     prev = lemmatizer.lemmatize(prev)
     prev2 = lemmatizer.lemmatize(prev2)
 
-    feat = {'connective': head, 'connectivePOS': conn_tag, 'cPosition': conn_pos_relative, 'prevWord+c': prev_conn,
-            'prevPOSTag': prev_pos, 'prevPOS+cPOS': prev_pos_conn_pos, 'prevWord': prev, 'prev2Word+c': prev2_conn,
-            'prev2POSTag': prev2_pos, 'prev2POS+cPOS': prev2_pos_conn_pos, 'prevWord2': prev2}
+    feat = {
+        'connective': conn, 'connectivePOS': conn_pos, 'cPosition': conn_pos_relative,
+        'prevWord': prev, 'prevPOSTag': prev_pos, 'prevWord+c': prev_conn, 'prevPOS+cPOS': prev_pos_conn_pos,
+        'prevWord2': prev2, 'prev2Word+c': prev2_conn, 'prev2POSTag': prev2_pos, 'prev2POS+cPOS': prev2_pos_conn_pos
+    }
 
     return feat
 
@@ -62,10 +59,13 @@ def generate_pdtb_features(pdtb, parses):
         arg2 = sorted({i[3] for i in relation['Arg2']['TokenList']})
         if not arg1 or not arg2:
             continue
-        if arg1[-1] < arg2[0]:
-            features.append((get_features(ptree, connective_raw, leaf_indices), 'PS'))
-        elif len(arg1) == 1 and len(arg2) == 1 and arg1[0] == arg2[0]:
+
+        distance = arg1[-1] - arg2[0]
+        if len(arg1) == 1 and len(arg2) == 1 and distance == 0:
             features.append((get_features(ptree, connective_raw, leaf_indices), 'SS'))
+        elif distance == -1:
+            features.append((get_features(ptree, connective_raw, leaf_indices), 'PS'))
+
     return list(zip(*features))
 
 
@@ -75,7 +75,6 @@ class ArgumentPositionClassifier:
             self.model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model', BaggingClassifier(
                     base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
                                                  n_jobs=-1, class_weight='balanced', random_state=0),
@@ -85,7 +84,6 @@ class ArgumentPositionClassifier:
             self.model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model',
                  SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
                                class_weight='balanced', random_state=0))

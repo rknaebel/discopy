@@ -6,12 +6,11 @@ import ujson as json
 import nltk
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline
 
-from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
     get_clause_direction_path, lca, get_index_tree
 from discopy.features import get_root_path
@@ -43,7 +42,6 @@ def get_features(conn_head, indices, ptree):
                 'rightSibNo': right_siblings_no, 'connCategory': conn_cat, 'clauseRelPosition': relative_position,
                 'clauseContext': clause_context, 'conn2clausePath': str(conn2clause_path),
                 'conn2rootPath': conn2root_path}
-
         features.append((feat, n_pos))
     return features
 
@@ -88,8 +86,7 @@ def generate_pdtb_features(pdtb, parses):
 
     for relation in filter(lambda i: i['Type'] == 'Explicit', pdtb):
         doc_id = relation['DocID']
-        chm = ConnHeadMapper()
-        conn_head, _ = chm.map_raw_connective(relation['Connective']['RawText'])
+        conn = relation['Connective']['RawText']
         try:
             arg1_sentence_id = relation['Arg1']['TokenList'][0][3]
             arg2_sentence_id = relation['Arg2']['TokenList'][0][3]
@@ -110,10 +107,10 @@ def generate_pdtb_features(pdtb, parses):
 
         # Arg1 is in the same sentence (SS)
         if arg1_sentence_id == arg2_sentence_id:
-            ss_features.extend(extract_ss_arguments(conn_head, indices, ptree, arg1, arg2))
+            ss_features.extend(extract_ss_arguments(conn, indices, ptree, arg1, arg2))
         # Arg1 is in the previous sentence (PS)
         elif (arg2_sentence_id - arg1_sentence_id) == 1:
-            ps_features.extend(extract_ps_arguments(conn_head, indices, ptree, arg2))
+            ps_features.extend(extract_ps_arguments(conn, indices, ptree, arg2))
     return list(zip(*ss_features)), list(zip(*ps_features))
 
 
@@ -123,7 +120,6 @@ class LinArgumentExtractClassifier:
             self.ss_model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model', BaggingClassifier(
                     base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
                                                  n_jobs=-1, class_weight='balanced', random_state=0),
@@ -132,7 +128,6 @@ class LinArgumentExtractClassifier:
             self.ps_model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model', BaggingClassifier(
                     base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
                                                  n_jobs=-1, class_weight='balanced', random_state=0),
@@ -142,7 +137,6 @@ class LinArgumentExtractClassifier:
             self.ss_model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model',
                  SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
                                class_weight='balanced', random_state=0))
@@ -150,7 +144,6 @@ class LinArgumentExtractClassifier:
             self.ps_model = Pipeline([
                 ('vectorizer', DictVectorizer()),
                 ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
                 ('model',
                  SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
                                class_weight='balanced', random_state=0))
@@ -192,13 +185,15 @@ class LinArgumentExtractClassifier:
 
     def extract_arguments(self, ptree, relation, arg_pos):
         indices = [token[4] for token in relation['Connective']['TokenList']]
-        chm = ConnHeadMapper()
-        conn_head, _ = chm.map_raw_connective(relation['Connective']['RawText'])
+        conn_head = relation['Connective']['RawText']
         ptree._label = 'S'
         ptree_ids = get_index_tree(ptree)
 
         fs = get_features(conn_head, indices, ptree)
         X = [i[0] for i in fs]
+        if not X:
+            print("Empty sample sequence", conn_head, indices, ptree)
+            return [], [], 0.0, 0.0
         position = [i[1] for i in fs]
         if arg_pos == 'SS':
             probs = self.ss_model.predict_proba(X)
@@ -224,9 +219,9 @@ class LinArgumentExtractClassifier:
                 logger.debug('arg1 is superset of arg2')
                 arg1 = arg1 - arg2
             if not arg1:
-                logger.warning("Empty Arg1")
+                logger.warning("SS Empty Arg1")
             if not arg2:
-                logger.warning("Empty Arg2")
+                logger.warning("SS Empty Arg2")
         elif arg_pos == 'PS':
             probs = self.ps_model.predict_proba(X)
             arg2_max_idx, _ = probs.argmax(axis=0)
@@ -236,7 +231,7 @@ class LinArgumentExtractClassifier:
             arg1 = set()
             arg2 = set(ptree_ids[position[arg2_max_idx]].leaves())
             if not arg2:
-                logger.warning("Empty Arg2")
+                logger.warning("PS Empty Arg2")
         else:
             raise NotImplementedError('Unknown argument position')
 
