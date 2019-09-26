@@ -4,6 +4,7 @@ import pickle
 import ujson as json
 
 import nltk
+import numpy as np
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import VarianceThreshold
@@ -52,9 +53,9 @@ def extract_ss_arguments(conn_head, indices, ptree, arg1, arg2):
     clause_features = get_features(conn_head, indices, ptree)
     for feature, clause in clause_features:
         clause_indices = set(ptree_ids[clause].leaves())
-        if clause_indices.issubset(arg1) and abs(len(arg1) - len(clause_indices)) <= 3:
+        if clause_indices.issubset(arg1):
             label = 'Arg1'
-        elif clause_indices.issubset(arg2) and abs(len(arg2) - len(clause_indices)) <= 3:
+        elif clause_indices.issubset(arg2):
             label = 'Arg2'
         else:
             label = 'NULL'
@@ -72,7 +73,7 @@ def extract_ps_arguments(conn_head, indices, ptree, arg2):
     clause_features = get_features(conn_head, indices, ptree)
     for feature, clause in clause_features:
         clause_indices = set(ptree_ids[clause].leaves())
-        if clause_indices.issubset(arg2) and abs(len(arg2) - len(clause_indices)) <= 3:
+        if clause_indices.issubset(arg2):
             label = 'Arg2'
         else:
             label = 'NULL'
@@ -91,7 +92,10 @@ def generate_pdtb_features(pdtb, parses):
             arg1_sentence_id = relation['Arg1']['TokenList'][0][3]
             arg2_sentence_id = relation['Arg2']['TokenList'][0][3]
             s = parses[doc_id]['sentences'][arg2_sentence_id]['parsetree']
-            ptree = nltk.ParentedTree.fromstring(s)
+            ptree = nltk.Tree.fromstring(s)
+            ptree._label = 'S'
+            nltk.treetransforms.collapse_unary(ptree, collapseRoot=True)
+            ptree = nltk.ParentedTree.convert(ptree)
         except ValueError:
             continue
         except IndexError:
@@ -186,30 +190,36 @@ class LinArgumentExtractClassifier:
     def extract_arguments(self, ptree, relation, arg_pos):
         indices = [token[4] for token in relation['Connective']['TokenList']]
         conn_head = relation['Connective']['RawText']
+        ptree = ptree.copy(deep=True)
+        ptree = nltk.Tree.convert(ptree)
         ptree._label = 'S'
+        nltk.treetransforms.collapse_unary(ptree, collapseRoot=True)
+        ptree = nltk.ParentedTree.convert(ptree)
         ptree_ids = get_index_tree(ptree)
 
-        fs = get_features(conn_head, indices, ptree)
-        X = [i[0] for i in fs]
-        if not X:
-            print("Empty sample sequence", conn_head, indices, ptree)
+        fs = sorted(get_features(conn_head, indices, ptree), key=lambda x: x[1])
+        if not fs:
+            print("Empty feature sequence", conn_head, indices, ptree)
             return [], [], 0.0, 0.0
-        position = [i[1] for i in fs]
+        X, position = zip(*fs)
         if arg_pos == 'SS':
             probs = self.ss_model.predict_proba(X)
-            max_idx_sorted = probs.argsort(axis=0)
-            arg1_max_idx, arg2_max_idx, _ = max_idx_sorted[-1]
-            arg1_prob, arg2_prob, _ = probs.max(axis=0)
 
-            if arg1_max_idx == arg2_max_idx:
-                try:
-                    arg1_max_idx = max_idx_sorted[-2][0]
-                    arg1_prob = probs[arg1_max_idx][0]
-                except IndexError:
-                    logger.warning("Index error")
-                    logger.debug(ptree)
-                    logger.debug(position)
-                    logger.debug(max_idx_sorted)
+            indices_sorted = np.where(probs.argsort().T[-1] == 1)[0]
+            if len(indices_sorted):
+                arg2_max_idx = indices_sorted[0]
+            else:
+                arg2_max_idx = probs[:, 1].argmax()
+            arg2_prob = probs[arg2_max_idx, 1]
+
+            probs[arg2_max_idx, :] = 0
+            indices_sorted = np.where(probs.argsort().T[-1] == 0)[0]
+            if len(indices_sorted):
+                arg1_max_idx = indices_sorted[0]
+            else:
+                arg1_max_idx = probs[:, 0].argmax()
+            arg1_prob = probs[arg1_max_idx, 0]
+
             arg2 = set(ptree_ids[position[arg2_max_idx]].leaves())
             arg1 = set(ptree_ids[position[arg1_max_idx]].leaves())
             if arg1.issubset(arg2):
@@ -224,8 +234,13 @@ class LinArgumentExtractClassifier:
                 logger.warning("SS Empty Arg2")
         elif arg_pos == 'PS':
             probs = self.ps_model.predict_proba(X)
-            arg2_max_idx, _ = probs.argmax(axis=0)
-            arg2_prob, _ = probs.max(axis=0)
+
+            indices_sorted = np.where(probs.argsort().T[-1] == 0)[0]
+            if len(indices_sorted):
+                arg2_max_idx = indices_sorted[0]
+            else:
+                arg2_max_idx = probs[:, 0].argmax()
+            arg2_prob = probs[arg2_max_idx, 0]
             arg1_prob = 1.0
 
             arg1 = set()

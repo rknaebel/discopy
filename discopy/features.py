@@ -100,7 +100,7 @@ def get_sibling_counts(ptree: ParentedTree) -> (int, int):
 def get_clauses(ptree):
     clauses = ((ptree[pos], pos) for pos in ptree.treepositions() if type(ptree[pos]) != str)
     clauses = [(subtree, pos) for subtree, pos in clauses if
-               subtree.height() > 1 and subtree.label() in ['VP', 'S', 'SBAR']]
+               subtree.height() > 2 and any(label in subtree.label() for label in ['VP', 'S', 'SBAR'])]
     return clauses
 
 
