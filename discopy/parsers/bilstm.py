@@ -8,10 +8,10 @@ import nltk
 
 from discopy.labeling.connective import ConnectiveClassifier
 from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, ArgumentExtractBiLSTMwithConn
+from discopy.parsers.utils import get_raw_tokens, get_token_list2
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
 from discopy.utils import init_logger
-from discopy.parsers.utils import get_raw_tokens, get_token_list2
 
 logger = logging.getLogger('discopy')
 
@@ -31,6 +31,9 @@ class Relation:
 
         def get_local_ids(self):
             return sorted(set(i[4] for i in self.TokenList))
+
+        def is_valid(self):
+            return len(self.TokenList) > 0
 
     def __init__(self):
         self.Connective = Relation.Span()
@@ -59,6 +62,9 @@ class Relation:
             'ptree': self.ptree
         }
 
+    def is_valid(self):
+        return self.Arg1.is_valid() and self.Arg2.is_valid()
+
     def to_conll(self):
         r = self.to_dict()
         del r['ptree']
@@ -68,20 +74,35 @@ class Relation:
         return self.Connective.RawText != ''
 
     def __str__(self):
-        return "Relation({}|{}|arg1:{}|arg2:{}|conn:{})".format(self.Type, self.Sense,
-                                                                self.Arg1.get_global_ids(),
-                                                                self.Arg2.get_global_ids(),
-                                                                self.Connective.get_global_ids())
+        return "Relation({} {} arg1:<{}> arg2:<{}> conn:<{}>)".format(
+            self.Type, self.Sense,
+            ",".join(map(str, self.Arg1.get_global_ids())),
+            ",".join(map(str, self.Arg2.get_global_ids())),
+            ",".join(map(str, self.Connective.get_global_ids()))
+        )
+
+    @staticmethod
+    def from_dict(d):
+        r = Relation()
+        r.Sense = d['Sense'][0]
+        r.Type = d['Type']
+        r.Connective.TokenList = d['Connective']['TokenList']
+        r.Connective.RawText = d['Connective']['RawText']
+        r.Arg1.TokenList = d['Arg1']['TokenList']
+        r.Arg1.RawText = d['Arg1']['RawText']
+        r.Arg2.TokenList = d['Arg2']['TokenList']
+        r.Arg2.RawText = d['Arg2']['RawText']
+        return r
 
 
 class AbstractBiLSTMDiscourseParser:
-    def __init__(self, n_estimators=1):
+    def __init__(self):
         self.hidden_size = 128
-        self.rnn_size = 512
+        self.rnn_size = 128
         self.window_length = 100
 
-        self.explicit_clf = ExplicitSenseClassifier(n_estimators=n_estimators)
-        self.non_explicit_clf = NonExplicitSenseClassifier(n_estimators=n_estimators)
+        self.explicit_clf = ExplicitSenseClassifier()
+        self.non_explicit_clf = NonExplicitSenseClassifier()
 
     def train(self, pdtb, parses, pdtb_val, parses_val):
         logger.info('Train Explicit Sense Classifier...')
@@ -162,13 +183,17 @@ class AbstractBiLSTMDiscourseParser:
             arg2 = [doc_words[i][0][0] for i in arg2_idxs]
             sense, sense_c = self.non_explicit_clf.get_sense(ptree_prev, ptree, dtree_prev, dtree, arg1, arg2)
             relation.Sense = sense
+            if relation.Sense in ('EntRel', 'NoRel'):
+                relation.Type = relation.Sense
+            else:
+                relation.Type = 'Implicit'
         return relations
 
 
 class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
 
-    def __init__(self, n_estimators=1, no_crf=False):
-        super().__init__(n_estimators)
+    def __init__(self, no_crf=False):
+        super().__init__()
         self.arg_labeler = ArgumentExtractBiLSTM(window_length=self.window_length,
                                                  hidden_dim=self.hidden_size,
                                                  rnn_dim=self.rnn_size, no_rnn=False,
@@ -199,12 +224,14 @@ class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
                                                             strides=1, max_distance=0.5)
         for r in arguments_pred:
             relation = Relation()
+            relation.Type = 'NonExplicit'
             relation.Arg1.TokenList = get_token_list2(doc_words, r.arg1)
             relation.Arg1.RawText = get_raw_tokens(doc_words, r.arg1)
             relation.Arg2.TokenList = get_token_list2(doc_words, r.arg2)
             relation.Arg2.RawText = get_raw_tokens(doc_words, r.arg2)
             if r.conn:
                 # TODO make more elegant... just some workaround
+                relation.Type = 'Explicit'
                 sent_id = Counter(i[3] for i in get_token_list2(doc_words, r.conn)).most_common(1)[0][0]
                 conn = [i[2] for i in get_token_list2(doc_words, r.conn) if i[3] == sent_id]
                 relation.Connective.TokenList = get_token_list2(doc_words, conn)
@@ -218,21 +245,45 @@ class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
         explicits = [r for r in relations if r.is_explicit()]
         non_explicits = [r for r in relations if not r.is_explicit()]
 
+        for r in explicits:
+            print(r)
+        for r in non_explicits:
+            print(r)
+
         explicits = self.parse_explicit_sense(doc, explicits)
+
+        # filter implicit relations if there is an explicit relation already
+        inter_relations = set()
+        for r in explicits:
+            for a1_s in r.Arg1.get_sentence_ids():
+                for a2_s in r.Arg2.get_sentence_ids():
+                    if a1_s - a2_s == 1:
+                        inter_relations.add(a1_s)
+                    elif a1_s - a2_s == -1:
+                        inter_relations.add(a2_s)
+        print(inter_relations)
         non_explicits = self.parse_implicit_senses(doc, non_explicits)
+        non_explicits = [r for r in non_explicits if all(a not in inter_relations for a in r.Arg1.get_sentence_ids())]
+
+        print()
+        for r in explicits:
+            print(r)
+        for r in non_explicits:
+            print(r)
+
         relations = explicits + non_explicits
 
         # TODO remove later
         # transforms the relation structure into dict format
         # just for now as long as the relation structure is used locally only
-        relations = [r.to_dict() for r in relations]
+        relations = [r.to_conll() for r in relations]
         return relations
 
 
 class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
 
-    def __init__(self, n_estimators=1, no_crf=False):
-        super().__init__(n_estimators)
+    def __init__(self, no_crf=False):
+        super().__init__()
         self.arg_labeler = ArgumentExtractBiLSTM(window_length=100, hidden_dim=128, rnn_dim=512, no_rnn=False,
                                                  no_dense=False, no_crf=no_crf, explicits_only=True)
 
@@ -315,7 +366,7 @@ class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
         # TODO remove later
         # transforms the relation structure into dict format
         # just for now as long as the relation structure is used locally only
-        relations = [r.to_dict() for r in relations]
+        relations = [r.to_conll() for r in relations]
         return relations
 
 
@@ -324,9 +375,9 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
     Extracts explicit arguments based on the connective prediction
     """
 
-    def __init__(self, n_estimators=1, no_crf=False):
-        super().__init__(n_estimators)
-        self.connective_clf = ConnectiveClassifier(n_estimators=n_estimators)
+    def __init__(self, no_crf=False):
+        super().__init__()
+        self.connective_clf = ConnectiveClassifier()
         self.arg_labeler = ArgumentExtractBiLSTMwithConn(window_length=self.window_length,
                                                          hidden_dim=self.hidden_size,
                                                          rnn_dim=self.rnn_size,
@@ -450,7 +501,7 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
         # TODO remove later
         # transforms the relation structure into dict format
         # just for now as long as the relation structure is used locally only
-        relations = [r.to_dict() for r in relations]
+        relations = [r.to_conll() for r in relations]
         return relations
 
 
@@ -471,8 +522,7 @@ if __name__ == "__main__":
     parser.load('bilstm-tmp', parses_train)
     # parser.train(pdtb_train, parses_train, pdtb_val, parses_val)
     # parser.save('bilstm-tmp')
-    print(parser.parse_doc(parses_train['wsj_1843']))
-    # logger.info('Evaluation on VAL')
-    # parser.score(pdtb_val, parses_val)
-    # logger.info('Evaluation on TEST')
-    # parser.score(pdtb_test, parses_test)
+    logger.info('Evaluation on VAL')
+    parser.score(pdtb_val, parses_val)
+    logger.info('Evaluation on TEST')
+    parser.score(pdtb_test, parses_test)

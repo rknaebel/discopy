@@ -1,17 +1,17 @@
 import logging
 import os
 import pickle
-import ujson as json
+import sys
 
 import nltk
 from nltk.tree import ParentedTree
-from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, cohen_kappa_score
 from sklearn.pipeline import Pipeline
 
+from discopy.data.conll16 import get_conll_dataset
 from discopy.features import get_connective_sentence_position, lca, get_pos_features
 from discopy.utils import init_logger
 
@@ -48,11 +48,7 @@ def generate_pdtb_features(pdtb, parses):
         connective_raw = relation['Connective']['RawText']
         leaf_indices = [token[4] for token in connective]
         ptree = parses[doc]['sentences'][connective[0][3]]['parsetree']
-        try:
-            ptree = nltk.ParentedTree.fromstring(ptree)
-        except ValueError:
-            continue
-        if not ptree.leaves():
+        if not ptree:
             continue
 
         arg1 = sorted({i[3] for i in relation['Arg1']['TokenList']})
@@ -70,24 +66,14 @@ def generate_pdtb_features(pdtb, parses):
 
 
 class ArgumentPositionClassifier:
-    def __init__(self, n_estimators=1):
-        if n_estimators > 1:
-            self.model = Pipeline([
-                ('vectorizer', DictVectorizer()),
-                ('variance', VarianceThreshold(threshold=0.001)),
-                ('model', BaggingClassifier(
-                    base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
-                                                 n_jobs=-1, class_weight='balanced', random_state=0),
-                    n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
-            ])
-        else:
-            self.model = Pipeline([
-                ('vectorizer', DictVectorizer()),
-                ('variance', VarianceThreshold(threshold=0.001)),
-                ('model',
-                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                               class_weight='balanced', random_state=0))
-            ])
+    def __init__(self):
+        self.model = Pipeline([
+            ('vectorizer', DictVectorizer()),
+            ('variance', VarianceThreshold(threshold=0.0001)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
+        ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'position_clf.p'), 'rb'))
@@ -121,11 +107,9 @@ class ArgumentPositionClassifier:
 if __name__ == "__main__":
     logger = init_logger()
 
-    pdtb_train = [json.loads(s) for s in
-                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+    data_path = sys.argv[1]
+    parses_train, pdtb_train = get_conll_dataset(data_path, 'en.train', load_trees=True, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(data_path, 'en.dev', load_trees=True, connective_mapping=True)
 
     clf = ArgumentPositionClassifier()
     logger.info('Train model')
@@ -134,4 +118,3 @@ if __name__ == "__main__":
     clf.score(pdtb_train, parses_train)
     logger.info('Evaluation on TEST')
     clf.score(pdtb_val, parses_val)
-    clf.save('../tmp')

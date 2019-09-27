@@ -1,10 +1,9 @@
-import json
 import logging
 import os
 import pickle
+import sys
 
 import nltk
-from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif
 from sklearn.linear_model import SGDClassifier
@@ -12,6 +11,7 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support, coh
 from sklearn.pipeline import Pipeline
 
 from discopy.conn_head_mapper import ConnHeadMapper
+from discopy.data.conll16 import get_conll_dataset
 from discopy.features import get_connective_sentence_position, lca
 from discopy.utils import preprocess_relations, init_logger
 
@@ -51,37 +51,23 @@ def generate_pdtb_features(pdtb, parses, filters=True):
         sentenceOffSet = relation['Connective']['TokenList'][0][3]
         doc = relation['DocID']
         sense = relation['Sense'][0]
-        try:
-            ptree = nltk.ParentedTree.fromstring(parses[doc]['sentences'][sentenceOffSet]['parsetree'])
-        except ValueError:
-            continue
-        if not ptree.leaves():
+        ptree = parses[doc]['sentences'][sentenceOffSet]['parsetree']
+        if not ptree:
             continue
         features.append((get_features(relation, ptree), sense))
     return list(zip(*features))
 
 
 class ExplicitSenseClassifier:
-    def __init__(self, n_estimators=1):
-        if n_estimators > 1:
-            self.model = Pipeline([
-                ('vectorizer', DictVectorizer()),
-                ('bagging', BaggingClassifier(base_estimator=Pipeline([
-                    ('variance', VarianceThreshold(threshold=0.001)),
-                    ('selector', SelectKBest(mutual_info_classif, k=100)),
-                    ('model', SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                                            class_weight='balanced', random_state=0))
-                ]), n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
-            ])
-        else:
-            self.model = Pipeline([
-                ('vectorizer', DictVectorizer()),
-                ('variance', VarianceThreshold(threshold=0.001)),
-                ('selector', SelectKBest(mutual_info_classif, k=100)),
-                ('model',
-                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                               class_weight='balanced', random_state=0))
-            ])
+    def __init__(self):
+        self.model = Pipeline([
+            ('vectorizer', DictVectorizer()),
+            ('variance', VarianceThreshold(threshold=0.0001)),
+            ('selector', SelectKBest(mutual_info_classif, k=100)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
+        ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'explicit_clf.p'), 'rb'))
@@ -115,11 +101,9 @@ class ExplicitSenseClassifier:
 if __name__ == "__main__":
     logger = init_logger()
 
-    pdtb_train = [json.loads(s) for s in
-                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+    data_path = sys.argv[1]
+    parses_train, pdtb_train = get_conll_dataset(data_path, 'en.train', load_trees=True, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(data_path, 'en.dev', load_trees=True, connective_mapping=True)
 
     clf = ExplicitSenseClassifier()
     logger.info('Train model')
@@ -128,4 +112,3 @@ if __name__ == "__main__":
     clf.score(pdtb_train, parses_train)
     logger.info('Evaluation on TEST')
     clf.score(pdtb_val, parses_val)
-    clf.save('../tmp')

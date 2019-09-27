@@ -1,18 +1,18 @@
 import logging
 import os
 import pickle
-import ujson as json
+import sys
 from collections import defaultdict
 from typing import Dict, List
 
 import nltk
-from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import cohen_kappa_score, precision_recall_fscore_support, accuracy_score
 from sklearn.pipeline import Pipeline
 
+from discopy.data.conll16 import get_conll_dataset
 from discopy.features import get_compressed_chain, get_pos_features, get_sibling_label
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives, \
     init_logger
@@ -98,44 +98,33 @@ def generate_pdtb_features(pdtb, parses):
     features = []
     pdtb = group_by_doc_id(pdtb)
     for doc_id, doc in parses.items():
+        if doc_id not in pdtb:
+            continue
+        # process document
         for sent_i, sentence in enumerate(doc['sentences']):
-            try:
-                parsetree = nltk.ParentedTree.fromstring(sentence['parsetree'])
-            except ValueError:
+            ptree = sentence['parsetree']
+            if not ptree:
                 continue
-            if not parsetree.leaves() or doc_id not in pdtb:
-                continue
-            doc_relations = pdtb[doc_id]
             conns_sent = {'-'.join([str(t[4]) for t in r['Connective']['TokenList']]) for r in doc_relations if
                           sent_i in [t[3] for t in r['Connective']['TokenList']]}
             for connective_candidate in get_connective_candidates(sentence['words']):
                 conn_idxs = [i for i, c in connective_candidate]
                 if '-'.join([str(i) for i, c in connective_candidate]) in conns_sent:
-                    features.append((get_features(parsetree, conn_idxs), 1))
+                    features.append((get_features(ptree, conn_idxs), 1))
                 else:
-                    features.append((get_features(parsetree, conn_idxs), 0))
+                    features.append((get_features(ptree, conn_idxs), 0))
     return list(zip(*features))
 
 
 class ConnectiveClassifier:
-    def __init__(self, n_estimators=1):
-        if n_estimators > 1:
-            self.model = Pipeline([
-                ('vectorizer', DictVectorizer()),
-                ('variance', VarianceThreshold(threshold=0.001)),
-                ('model', BaggingClassifier(
-                    base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
-                                                 n_jobs=-1, class_weight='balanced', random_state=0),
-                    n_estimators=n_estimators, max_samples=0.75, n_jobs=-1))
-            ])
-        else:
-            self.model = Pipeline([
-                ('vectorizer', DictVectorizer()),
-                ('variance', VarianceThreshold(threshold=0.001)),
-                ('model',
-                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                               class_weight='balanced', random_state=0))
-            ])
+    def __init__(self):
+        self.model = Pipeline([
+            ('vectorizer', DictVectorizer()),
+            ('variance', VarianceThreshold(threshold=0.0001)),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
+        ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'connective_clf.p'), 'rb'))
@@ -176,12 +165,9 @@ class ConnectiveClassifier:
 
 if __name__ == "__main__":
     logger = init_logger()
-
-    pdtb_train = [json.loads(s) for s in
-                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+    data_path = sys.argv[1]
+    parses_train, pdtb_train = get_conll_dataset(data_path, 'en.train', load_trees=True, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(data_path, 'en.dev', load_trees=True, connective_mapping=True)
 
     clf = ConnectiveClassifier()
     logger.info('Train model')

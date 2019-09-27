@@ -1,13 +1,14 @@
 import logging
 import os
 import pickle
-import ujson as json
+import sys
 
 import nltk
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn_crfsuite import CRF
 
+from discopy.data.conll16 import get_conll_dataset
 from discopy.utils import init_logger
 
 logger = logging.getLogger('discopy')
@@ -36,22 +37,15 @@ def generate_pdtb_features_crf(pdtb, parses):
 
     for relation in filter(lambda i: i['Type'] == 'Explicit', pdtb):
         doc_id = relation['DocID']
-        try:
-            arg1_sentence_id = relation['Arg1']['TokenList'][0][3]
-            arg2_sentence_id = relation['Arg2']['TokenList'][0][3]
-            s = parses[doc_id]['sentences'][arg2_sentence_id]['parsetree']
-            ptree = nltk.ParentedTree.fromstring(s)
-        except ValueError:
-            continue
-        except IndexError:
-            continue
+        arg1_sentence_id = relation['Arg1']['TokenList'][0][3]
+        arg2_sentence_id = relation['Arg2']['TokenList'][0][3]
+        ptree = parses[doc_id]['sentences'][arg2_sentence_id]['parsetree']
 
-        if not ptree.leaves():
+        if not ptree:
             continue
 
         arg1 = set([i[4] for i in relation['Arg1']['TokenList']])
         arg2 = set([i[4] for i in relation['Arg2']['TokenList']])
-
         conn = [token[4] for token in relation['Connective']['TokenList']]
 
         labels = []
@@ -158,11 +152,9 @@ class ArgumentExtractCRF:
 if __name__ == "__main__":
     logger = init_logger()
 
-    pdtb_train = [json.loads(s) for s in
-                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+    data_path = sys.argv[1]
+    parses_train, pdtb_train = get_conll_dataset(data_path, 'en.train', load_trees=True, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(data_path, 'en.dev', load_trees=True, connective_mapping=True)
 
     clf = ArgumentExtractCRF()
     logger.info('Train CRF model')
@@ -171,4 +163,3 @@ if __name__ == "__main__":
     clf.score(pdtb_train, parses_train)
     logger.info('Evaluation on TEST')
     clf.score(pdtb_val, parses_val)
-    # clf.save('../tmp')

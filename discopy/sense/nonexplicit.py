@@ -1,17 +1,17 @@
 import logging
 import os
 import pickle
-import ujson as json
+import sys
 from collections import defaultdict
 
 import nltk
-from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline, FeatureUnion
 
+from discopy.data.conll16 import get_conll_dataset
 from discopy.utils import ItemSelector, preprocess_relations, init_logger
 
 logger = logging.getLogger('discopy')
@@ -26,7 +26,7 @@ def get_production_rules(ptree):
 
 
 def extract_productions(ptrees):
-    return [production for ptree in ptrees for production in get_production_rules(ptree)]
+    return [production for ptree in ptrees if ptree for production in get_production_rules(ptree)]
 
 
 def get_dependencies(dtree):
@@ -37,7 +37,7 @@ def get_dependencies(dtree):
 
 
 def extract_dependencies(dtrees):
-    return [deps for dtree in dtrees for deps in get_dependencies(dtree)]
+    return [deps for dtree in dtrees if dtree for deps in get_dependencies(dtree)]
 
 
 def get_features(ptrees_prev, ptrees, dtrees_prev, dtrees, arg1, arg2):
@@ -82,16 +82,11 @@ def generate_pdtb_features(pdtb, parses, filters=True):
         arg1_sentence_ids = {t[3] for t in relation['Arg1']['TokenList']}
         arg2_sentence_ids = {t[3] for t in relation['Arg2']['TokenList']}
         doc = relation['DocID']
-        try:
-            arg1_parse_trees = [nltk.ParentedTree.fromstring(parses[doc]['sentences'][sentence_id]['parsetree']) for
-                                sentence_id in arg1_sentence_ids]
-            arg2_parse_trees = [nltk.ParentedTree.fromstring(parses[doc]['sentences'][sentence_id]['parsetree']) for
-                                sentence_id in arg2_sentence_ids]
+        arg1_parse_trees = [parses[doc]['sentences'][sentence_id]['parsetree'] for sentence_id in arg1_sentence_ids]
+        arg2_parse_trees = [parses[doc]['sentences'][sentence_id]['parsetree'] for sentence_id in arg2_sentence_ids]
+        arg1_dep_trees = [parses[doc]['sentences'][s_id]['dependencies'] for s_id in arg1_sentence_ids]
+        arg2_dep_trees = [parses[doc]['sentences'][s_id]['dependencies'] for s_id in arg2_sentence_ids]
 
-            arg1_dep_trees = [parses[doc]['sentences'][s_id]['dependencies'] for s_id in arg1_sentence_ids]
-            arg2_dep_trees = [parses[doc]['sentences'][s_id]['dependencies'] for s_id in arg2_sentence_ids]
-        except ValueError:
-            continue
         arg1 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg1']['TokenList']]
         arg2 = [parses[doc]['sentences'][t[3]]['words'][t[4]][0] for t in relation['Arg2']['TokenList']]
         sense = (relation['Type'], relation['Sense'][0])
@@ -102,61 +97,32 @@ def generate_pdtb_features(pdtb, parses, filters=True):
 
 
 class NonExplicitSenseClassifier:
-    def __init__(self, n_estimators=1):
-        if n_estimators > 1:
-            self.model = Pipeline([
-                ('union', FeatureUnion([
-                    ('productions', Pipeline([
-                        ('selector', ItemSelector(key='prod')),
-                        ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.001)),
-                        ('reduce', SelectKBest(mutual_info_classif, k=100))
-                    ])),
-                    ('dependecies', Pipeline([
-                        ('selector', ItemSelector(key='deps')),
-                        ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.001)),
-                        ('reduce', SelectKBest(mutual_info_classif, k=100))
-                    ])),
-                    ('word_pairs', Pipeline([
-                        ('selector', ItemSelector(key='word_pairs')),
-                        ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.005)),
-                        ('reduce', SelectKBest(mutual_info_classif, k=500))
-                    ]))
+    def __init__(self):
+        self.model = Pipeline([
+            ('union', FeatureUnion([
+                ('productions', Pipeline([
+                    ('selector', ItemSelector(key='prod')),
+                    ('vectorizer', DictVectorizer()),
+                    ('variance', VarianceThreshold(threshold=0.001)),
+                    ('reduce', SelectKBest(mutual_info_classif, k=100))
                 ])),
-                ('model', BaggingClassifier(
-                    base_estimator=SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100,
-                                                 n_jobs=-1, class_weight='balanced', random_state=0),
-                    n_estimators=n_estimators,
-                    max_samples=0.75, n_jobs=-1))
-            ])
-        else:
-            self.model = Pipeline([
-                ('union', FeatureUnion([
-                    ('productions', Pipeline([
-                        ('selector', ItemSelector(key='prod')),
-                        ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.001)),
-                        ('reduce', SelectKBest(mutual_info_classif, k=100))
-                    ])),
-                    ('dependecies', Pipeline([
-                        ('selector', ItemSelector(key='deps')),
-                        ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.001)),
-                        ('reduce', SelectKBest(mutual_info_classif, k=100))
-                    ])),
-                    ('word_pairs', Pipeline([
-                        ('selector', ItemSelector(key='word_pairs')),
-                        ('vectorizer', DictVectorizer()),
-                        ('variance', VarianceThreshold(threshold=0.005)),
-                        ('reduce', SelectKBest(mutual_info_classif, k=500))
-                    ]))
+                ('dependecies', Pipeline([
+                    ('selector', ItemSelector(key='deps')),
+                    ('vectorizer', DictVectorizer()),
+                    ('variance', VarianceThreshold(threshold=0.001)),
+                    ('reduce', SelectKBest(mutual_info_classif, k=100))
                 ])),
-                ('model',
-                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                               class_weight='balanced', random_state=0))
-            ])
+                ('word_pairs', Pipeline([
+                    ('selector', ItemSelector(key='word_pairs')),
+                    ('vectorizer', DictVectorizer()),
+                    ('variance', VarianceThreshold(threshold=0.005)),
+                    ('reduce', SelectKBest(mutual_info_classif, k=500))
+                ]))
+            ])),
+            ('model',
+             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                           class_weight='balanced', random_state=0))
+        ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'non_explicit_clf.p'), 'rb'))
@@ -194,11 +160,9 @@ class NonExplicitSenseClassifier:
 if __name__ == "__main__":
     logger = init_logger()
 
-    pdtb_train = [json.loads(s) for s in
-                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+    data_path = sys.argv[1]
+    parses_train, pdtb_train = get_conll_dataset(data_path, 'en.train', load_trees=True, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(data_path, 'en.dev', load_trees=True, connective_mapping=True)
 
     clf = NonExplicitSenseClassifier()
     logger.info('Train model')
@@ -207,4 +171,3 @@ if __name__ == "__main__":
     clf.score(pdtb_train, parses_train)
     logger.info('Evaluation on TEST')
     clf.score(pdtb_val, parses_val)
-    clf.save('../tmp')

@@ -17,12 +17,12 @@ logger = logging.getLogger('discopy')
 
 class LinParser(object):
 
-    def __init__(self, n_estimators=1):
-        self.connective_clf = ConnectiveClassifier(n_estimators=n_estimators)
-        self.arg_pos_clf = ArgumentPositionClassifier(n_estimators=n_estimators)
-        self.arg_extract_clf = LinArgumentExtractClassifier(n_estimators=n_estimators)
-        self.explicit_clf = ExplicitSenseClassifier(n_estimators=n_estimators)
-        self.non_explicit_clf = NonExplicitSenseClassifier(n_estimators=n_estimators)
+    def __init__(self):
+        self.connective_clf = ConnectiveClassifier()
+        self.arg_pos_clf = ArgumentPositionClassifier()
+        self.arg_extract_clf = LinArgumentExtractClassifier()
+        self.explicit_clf = ExplicitSenseClassifier()
+        self.non_explicit_clf = NonExplicitSenseClassifier()
 
     def train(self, pdtb, parses, pdtb_val=None, parses_val=None):
         logger.info('Train Connective Classifier...')
@@ -255,10 +255,10 @@ class LinParser(object):
 
 class LinArgumentParser(LinParser):
 
-    def __init__(self, n_estimators=1):
-        self.connective_clf = ConnectiveClassifier(n_estimators=n_estimators)
-        self.arg_pos_clf = ArgumentPositionClassifier(n_estimators=n_estimators)
-        self.arg_extract_clf = LinArgumentExtractClassifier(n_estimators=n_estimators)
+    def __init__(self):
+        self.connective_clf = ConnectiveClassifier()
+        self.arg_pos_clf = ArgumentPositionClassifier()
+        self.arg_extract_clf = LinArgumentExtractClassifier()
 
     def train(self, pdtb, parses, pdtb_val=None, parses_val=None):
         logger.info('Train Connective Classifier...')
@@ -280,13 +280,13 @@ class LinArgumentParser(LinParser):
         self.connective_clf.save(path)
         self.arg_pos_clf.save(path)
         self.arg_extract_clf.save(path)
-        joblib.dump(self, os.path.join(path, 'parser.joblib'))
 
     def load(self, path, parses=None):
         if not os.path.exists(path):
             raise FileNotFoundError('Path not found')
         self.connective_clf.load(path)
         self.arg_pos_clf.load(path)
+        self.arg_extract_clf.load(path)
 
     def parse_doc(self, doc):
         relations = self.parse_connectives(doc)
