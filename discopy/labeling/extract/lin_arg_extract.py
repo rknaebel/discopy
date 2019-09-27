@@ -21,6 +21,39 @@ from discopy.utils import init_logger
 logger = logging.getLogger('discopy')
 
 
+def simplify_tree(ptree, collapse_root=False):
+    ptree._label = 'S'
+    tree = nltk.Tree.convert(ptree)
+
+    if not collapse_root and isinstance(tree, nltk.Tree) and len(tree) == 1:
+        nodes = [tree[0]]
+    else:
+        nodes = [tree]
+
+    # depth-first traversal of tree
+    while nodes:
+        node = nodes.pop()
+        if isinstance(node, nltk.Tree):
+            if (
+                    len(node) == 1
+                    and isinstance(node[0], nltk.Tree)
+                    and isinstance(node[0, 0], nltk.Tree)
+            ):
+                if node.label() != node[0].label():
+                    node.set_label(node.label() + '+' + node[0].label())
+                else:
+                    node.set_label(node.label())
+                node[0:] = [child for child in node[0]]
+                # since we assigned the child's children to the current node,
+                # evaluate the current node again
+                nodes.append(node)
+            else:
+                for child in node:
+                    nodes.append(child)
+
+    return nltk.ParentedTree.convert(tree)
+
+
 def get_features(conn_head, indices, ptree):
     features = []
     lca_loc = lca(ptree, indices)
@@ -92,10 +125,8 @@ def generate_pdtb_features(pdtb, parses):
             arg1_sentence_id = relation['Arg1']['TokenList'][0][3]
             arg2_sentence_id = relation['Arg2']['TokenList'][0][3]
             s = parses[doc_id]['sentences'][arg2_sentence_id]['parsetree']
-            ptree = nltk.Tree.fromstring(s)
-            ptree._label = 'S'
-            nltk.treetransforms.collapse_unary(ptree, collapseRoot=True)
-            ptree = nltk.ParentedTree.convert(ptree)
+            ptree = nltk.ParentedTree.fromstring(s)
+            ptree = simplify_tree(ptree)
         except ValueError:
             continue
         except IndexError:
@@ -140,14 +171,14 @@ class LinArgumentExtractClassifier:
         else:
             self.ss_model = Pipeline([
                 ('vectorizer', DictVectorizer()),
-                ('variance', VarianceThreshold(threshold=0.001)),
+                ('variance', VarianceThreshold(threshold=0.0001)),
                 ('model',
                  SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
                                class_weight='balanced', random_state=0))
             ])
             self.ps_model = Pipeline([
                 ('vectorizer', DictVectorizer()),
-                ('variance', VarianceThreshold(threshold=0.001)),
+                ('variance', VarianceThreshold(threshold=0.0001)),
                 ('model',
                  SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
                                class_weight='balanced', random_state=0))
@@ -190,11 +221,7 @@ class LinArgumentExtractClassifier:
     def extract_arguments(self, ptree, relation, arg_pos):
         indices = [token[4] for token in relation['Connective']['TokenList']]
         conn_head = relation['Connective']['RawText']
-        ptree = ptree.copy(deep=True)
-        ptree = nltk.Tree.convert(ptree)
-        ptree._label = 'S'
-        nltk.treetransforms.collapse_unary(ptree, collapseRoot=True)
-        ptree = nltk.ParentedTree.convert(ptree)
+        ptree = simplify_tree(ptree)
         ptree_ids = get_index_tree(ptree)
 
         fs = sorted(get_features(conn_head, indices, ptree), key=lambda x: x[1])
