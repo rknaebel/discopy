@@ -34,14 +34,21 @@ def evaluate_conll_document(gold_conll_list, pred_conll_list, threshold=0.9):
 
 
 def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9):
+    all_results = {}
     results = []
     for doc_id in gold_relations.keys():
+        all_results[doc_id] = {
+            'all': {},
+            'explicit': {},
+            'implicit': {}
+        }
+
         gold_list = gold_relations.get(doc_id, [])
         predicted_list = predicted_relations.get(doc_id, [])
 
         connective_cm = evaluate_connectives(gold_list, predicted_list, threshold)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list, threshold)
-        sense_cm = evaluate_sense(gold_list, predicted_list, threshold)
+        sense_cm, alignment = evaluate_sense(gold_list, predicted_list, threshold)
 
         results.append(
             np.array([
@@ -50,8 +57,18 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
                 arg2_cm,
                 rel_arg_cm,
                 sense_cm,
-            ])
-        )
+            ]))
+
+        all_results[doc_id]['all'] = {
+            'DocID': doc_id,
+            'Conn': compute_prf(*results[-1][0]),
+            'Arg1': compute_prf(*results[-1][1]),
+            'Arg2': compute_prf(*results[-1][2]),
+            'Arg1+Arg2': compute_prf(*results[-1][3]),
+            'Sense': compute_prf(*results[-1][4]),
+            'Alignment': alignment,
+        }
+
     results = np.stack(results).sum(axis=0)
     print_results(results, 'ALL')
 
@@ -62,7 +79,7 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
 
         connective_cm = evaluate_connectives(gold_list, predicted_list, threshold)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list, threshold)
-        sense_cm = evaluate_sense(gold_list, predicted_list, threshold)
+        sense_cm, alignment = evaluate_sense(gold_list, predicted_list, threshold)
 
         results.append(
             np.array([
@@ -73,6 +90,17 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
                 sense_cm,
             ])
         )
+
+        all_results[doc_id]['explicit'] = {
+            'DocID': doc_id,
+            'Conn': compute_prf(*results[-1][0]),
+            'Arg1': compute_prf(*results[-1][1]),
+            'Arg2': compute_prf(*results[-1][2]),
+            'Arg1+Arg2': compute_prf(*results[-1][3]),
+            'Sense': compute_prf(*results[-1][4]),
+            'Alignment': alignment,
+        }
+
     results = np.stack(results).sum(axis=0)
     print_results(results, 'EXPLICIT')
 
@@ -83,7 +111,7 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
 
         connective_cm = evaluate_connectives(gold_list, predicted_list, threshold)
         arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list, threshold)
-        sense_cm = evaluate_sense(gold_list, predicted_list, threshold)
+        sense_cm, alignment = evaluate_sense(gold_list, predicted_list, threshold)
 
         results.append(
             np.array([
@@ -94,9 +122,21 @@ def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9)
                 sense_cm,
             ])
         )
+
+        all_results[doc_id]['implicit'] = {
+            'DocID': doc_id,
+            'Conn': compute_prf(*results[-1][0]),
+            'Arg1': compute_prf(*results[-1][1]),
+            'Arg2': compute_prf(*results[-1][2]),
+            'Arg1+Arg2': compute_prf(*results[-1][3]),
+            'Sense': compute_prf(*results[-1][4]),
+            'Alignment': alignment,
+        }
     results = np.stack(results).sum(axis=0)
     print_results(results, 'NON-EXPLICIT')
     logger.info('==========================================================')
+
+    return all_results
 
 
 def evaluate_argument_extractor(gold_list, predicted_list, threshold=0.9):
@@ -145,7 +185,7 @@ def evaluate_sense(gold_list, predicted_list, threshold=0.9):
         else:
             fn += 1
 
-    return np.array([tp, fp, fn])
+    return np.array([tp, fp, fn]), gold_to_predicted_map
 
 
 def compute_confusion_counts(gold_list, predicted_list, matching_fn, threshold=0.9):
@@ -153,7 +193,7 @@ def compute_confusion_counts(gold_list, predicted_list, matching_fn, threshold=0
     unmatched = np.ones(len(predicted_list), dtype=bool)
     for gold_span in gold_list:
         for i, predicted_span in enumerate(predicted_list):
-            if matching_fn(gold_span, predicted_span) > threshold and unmatched[i]:
+            if unmatched[i] and matching_fn(gold_span, predicted_span) > threshold:
                 tp += 1
                 unmatched[i] = 0
                 break
