@@ -8,7 +8,7 @@ def get_root_path(clause) -> str:
     while clause.parent():
         clause = clause.parent()
         path.append(clause.label())
-    return "-".join(path)
+    return "-".join(reversed(path))
 
 
 def get_compressed_chain(chain):
@@ -68,14 +68,14 @@ def get_clause_direction_path(conn, clause) -> str:
     if height(conn) == height(conn.root()):
         return str(conn.label())
     if height(conn) == height(clause):
-        return str(conn.label() + 'U' + conn.parent().label() + 'D' + clause.label())
+        return str(conn.label() + '/U/' + conn.parent().label() + '/D/' + clause.label())
     elif height(conn) > height(clause):
         distance = height(conn) - height(clause) + 1
         p = conn.label()
         parent = conn
         while distance != 0 and parent.parent():
             parent = parent.parent()
-            p += 'U' + parent.label()
+            p += '/U/' + parent.label()
             distance -= 1
         distance = height(clause) - height(parent)
         parent = clause
@@ -84,7 +84,7 @@ def get_clause_direction_path(conn, clause) -> str:
             parent = parent.parent()
             down.append(parent.label())
             distance -= 1
-        d = 'D' + clause.label()
+        d = '/D/' + clause.label()
         p += d
         return str(p)
 
