@@ -7,7 +7,6 @@ args = get_arguments()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-import ujson as json
 from tqdm import tqdm
 
 import discopy.evaluate.exact
@@ -59,6 +58,7 @@ if __name__ == '__main__':
     parses_train, pdtb_train = get_conll_dataset(args.conll, 'en.train', load_trees=False, connective_mapping=True)
     parses_val, pdtb_val = get_conll_dataset(args.conll, 'en.dev', load_trees=False, connective_mapping=True)
     parses_test, pdtb_test = get_conll_dataset(args.conll, 'en.test', load_trees=False, connective_mapping=True)
+    parses_blind, pdtb_blind = get_conll_dataset(args.conll, 'en.blind-test', load_trees=False, connective_mapping=True)
 
 
     logger.info('Init Parser...')
@@ -75,15 +75,13 @@ if __name__ == '__main__':
     else:
         raise ValueError('Training and Loading not clear')
 
-    # logger.info('component evaluation (test)')
-    # parser.score(pdtb_test, parses_test)
+    logger.info('component evaluation (test)')
+    parser.score(pdtb_test, parses_test)
 
     logger.info('extract discourse relations from test data')
     pdtb_pred = extract_discourse_relations(parser, parses_test)
-    if args.out:
-        with open(args.out, 'w') as fh:
-            for doc_id, doc in pdtb_pred.items():
-                for relation in doc['Relations']:
-                    fh.write('{}\n'.format(json.dumps(relation)))
+    evaluate_parser(pdtb_test, pdtb_pred, threshold=args.threshold)
 
-    all_results = evaluate_parser(pdtb_test, pdtb_pred, threshold=args.threshold)
+    logger.info('extract discourse relations from BLIND data')
+    pdtb_pred = extract_discourse_relations(parser, parses_blind)
+    evaluate_parser(pdtb_blind, pdtb_pred, threshold=args.threshold)

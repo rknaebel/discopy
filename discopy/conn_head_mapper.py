@@ -4,7 +4,7 @@ class ConnHeadMapper(object):
         self.mapping = ConnHeadMapper.DEFAULT_MAPPING
 
     def map_raw_connective(self, raw_connective):
-        raw_connective = raw_connective.lower()
+        raw_connective = raw_connective.strip().lower()
         head_connective = self.mapping.get(raw_connective, raw_connective)
         # find the index of the head connectives
         raw_connective_token_list = raw_connective.split(' ')
