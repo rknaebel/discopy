@@ -105,7 +105,7 @@ def generate_pdtb_features(pdtb, parses):
             ptree = sentence['parsetree']
             if not ptree:
                 continue
-            conns_sent = {'-'.join([str(t[4]) for t in r['Connective']['TokenList']]) for r in doc_relations if
+            conns_sent = {'-'.join([str(t[4]) for t in r['Connective']['TokenList']]) for r in pdtb[doc_id] if
                           sent_i in [t[3] for t in r['Connective']['TokenList']]}
             for connective_candidate in get_connective_candidates(sentence['words']):
                 conn_idxs = [i for i, c in connective_candidate]
