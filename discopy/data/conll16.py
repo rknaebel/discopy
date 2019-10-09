@@ -3,6 +3,8 @@ import multiprocessing
 import ujson as json
 
 import nltk
+import spacy
+from benepar.spacy_plugin import BeneparComponent
 
 from discopy.conn_head_mapper import ConnHeadMapper
 
@@ -45,4 +47,46 @@ def get_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True
             r['Connective']['CharacterSpanList'] = [
                 [r['Connective']['TokenList'][0][0], r['Connective']['TokenList'][-1][1]]]
 
+    return parses, pdtb
+
+
+def parse_sentence(nlp, sentence):
+    words = [w[0] for w in sentence['words']]
+    doc = nlp(words)
+    sent = list(doc.sents)[0]
+    return {
+        'dependencies': [(t.dep_, "{}-{}".format(t.head.text, t.head.i + 1), "{}-{}".format(t.text, t.i + 1)) for t in
+                         sent],
+        'parsetree': sent._.parse_string,
+        'words': [
+            (w_orig[0], {
+                'CharacterOffsetBegin': w_orig[1]['CharacterOffsetBegin'],
+                'CharacterOffsetEnd': w_orig[1]['CharacterOffsetEnd'],
+                'Linkers': w_orig[1]['Linkers'],
+                'PartOfSpeech': w_doc.tag_
+            }) for w_doc, w_orig in zip(sent, sentence['words'])
+        ]
+    }
+    # return {
+    #     'Sentence': sent.string.strip(),
+    #     'Length': len(sent.string),
+    #     'Tokens': [t.text for t in sent],
+    #     'POS': [t.tag_ for t in sent],
+    #     'Offset': [t.idx - sent[0].idx for t in sent],
+    #     'Dep': [(t.dep_, (t.head.text, t.head.i), (t.text, t.i)) for t in sent],
+    #     'SentenceOffset': offset + sent[0].idx,
+    #     'Parse': sent._.parse_string,
+    #     'NER_iob': [t.ent_iob_ for t in sent],
+    #     'NER_type': [t.ent_type_ for t in sent],
+    # }
+
+
+def get_conll_dataset_extended(data_path, mode, connective_mapping=True):
+    parses, pdtb = get_conll_dataset(data_path, mode, False, connective_mapping)
+    nlp = spacy.load('en')
+    nlp.tokenizer = nlp.tokenizer.tokens_from_list
+    nlp.add_pipe(BeneparComponent("benepar_en2"))
+    for doc_id, doc in parses.items():
+        for sent_idx, sentence in enumerate(doc['sentences']):
+            doc['sentences'][sent_idx] = parse_sentence(nlp, sentence)
     return parses, pdtb

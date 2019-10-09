@@ -1,7 +1,7 @@
+import argparse
 import multiprocessing as mp
 import ujson as json
 
-import argparse
 import numpy as np
 
 import discopy.evaluate.exact
@@ -18,6 +18,8 @@ def get_arguments():
     argument_parser.add_argument("--dir", help="",
                                  default='tmp')
     argument_parser.add_argument("--out", help="",
+                                 default='')
+    argument_parser.add_argument("--fin", help="",
                                  default='')
     argument_parser.add_argument("--parser", help="",
                                  default='lin')
