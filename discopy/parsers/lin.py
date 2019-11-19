@@ -2,11 +2,11 @@ import logging
 import os
 
 import joblib
-import nltk
 
 from discopy.labeling.argument_position import ArgumentPositionClassifier
 from discopy.labeling.connective import ConnectiveClassifier
 from discopy.labeling.extract.lin_arg_extract import LinArgumentExtractClassifier
+from discopy.parsers.parser import AbstractBaseParser
 from discopy.parsers.utils import get_token_list2, get_raw_tokens2
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
@@ -15,7 +15,7 @@ from discopy.utils import ParsedRelation
 logger = logging.getLogger('discopy')
 
 
-class LinParser(object):
+class LinParser(AbstractBaseParser):
 
     def __init__(self):
         self.connective_clf = ConnectiveClassifier()
@@ -24,7 +24,7 @@ class LinParser(object):
         self.explicit_clf = ExplicitSenseClassifier()
         self.non_explicit_clf = NonExplicitSenseClassifier()
 
-    def train(self, pdtb, parses, pdtb_val=None, parses_val=None):
+    def fit(self, pdtb, parses, pdtb_val=None, parses_val=None):
         logger.info('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
         logger.info('Train ArgPosition Classifier...')
@@ -54,7 +54,7 @@ class LinParser(object):
         self.non_explicit_clf.save(path)
         joblib.dump(self, os.path.join(path, 'parser.joblib'))
 
-    def load(self, path, parses=None):
+    def load(self, path):
         if not os.path.exists(path):
             raise FileNotFoundError('Path not found')
         self.connective_clf.load(path)
@@ -67,17 +67,6 @@ class LinParser(object):
     def from_path(path):
         return joblib.load(os.path.join(path, 'parser.joblib'))
 
-    def parse_documents(self, documents):
-        relations = []
-        for idx, (doc_id, doc) in enumerate(documents.items()):
-            parsed_relations = self.parse_doc(doc)
-            for p in parsed_relations:
-                p['DocID'] = doc_id
-                p['ID'] = hash(p)
-            relations.extend(parsed_relations)
-
-        return relations
-
     def parse_connectives(self, doc):
         relations = []
         token_id = 0
@@ -86,13 +75,7 @@ class LinParser(object):
 
         for sent_id, sent in enumerate(doc['sentences']):
             sent_len = len(sent['words'])
-            try:
-                ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
-            except ValueError:
-                logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
-                token_id += sent_len
-                sent_offset += sent_len
-                continue
+            ptree = sent['parsetree']
             if not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 token_id += sent_len
@@ -125,11 +108,7 @@ class LinParser(object):
 
         for relation in relations:
             sent_id = relation.Connective.get_sentence_ids()[0]
-            try:
-                ptree = nltk.ParentedTree.fromstring(doc['sentences'][sent_id]['parsetree'])
-            except ValueError:
-                logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
-                continue
+            ptree = doc['sentences'][sent_id]['parsetree']
             if not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 continue
@@ -165,11 +144,7 @@ class LinParser(object):
     def parse_explicit_sense(self, doc, relations):
         for relation in relations:
             sent_id = relation.Connective.get_sentence_ids()[0]
-            try:
-                ptree = nltk.ParentedTree.fromstring(doc['sentences'][sent_id]['parsetree'])
-            except ValueError:
-                logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
-                continue
+            ptree = doc['sentences'][sent_id]['parsetree']
             if not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 continue
@@ -215,14 +190,10 @@ class LinParser(object):
         for relation in filter(lambda r: not r.is_explicit(), relations):
             sent_id = relation.Arg2.get_sentence_ids()[0]
             sent = doc['sentences'][sent_id]
-            try:
-                ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
-                ptree_prev = nltk.ParentedTree.fromstring(doc['sentences'][sent_id - 1]['parsetree'])
-                dtree = sent['dependencies']
-                dtree_prev = doc['sentences'][sent_id - 1]['dependencies']
-            except ValueError:
-                logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
-                continue
+            ptree = sent['parsetree']
+            ptree_prev = doc['sentences'][sent_id - 1]['parsetree']
+            dtree = sent['dependencies']
+            dtree_prev = doc['sentences'][sent_id - 1]['dependencies']
 
             if not ptree.leaves() or not ptree_prev.leaves():
                 continue
@@ -260,7 +231,7 @@ class LinArgumentParser(LinParser):
         self.arg_pos_clf = ArgumentPositionClassifier()
         self.arg_extract_clf = LinArgumentExtractClassifier()
 
-    def train(self, pdtb, parses, pdtb_val=None, parses_val=None):
+    def fit(self, pdtb, parses, pdtb_val=None, parses_val=None):
         logger.info('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
         logger.info('Train ArgPosition Classifier...')
@@ -281,7 +252,7 @@ class LinArgumentParser(LinParser):
         self.arg_pos_clf.save(path)
         self.arg_extract_clf.save(path)
 
-    def load(self, path, parses=None):
+    def load(self, path):
         if not os.path.exists(path):
             raise FileNotFoundError('Path not found')
         self.connective_clf.load(path)

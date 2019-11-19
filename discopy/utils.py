@@ -254,6 +254,7 @@ def preprocess_relations(pdtb, level=2, filters=True):
 
 def init_logger(path='', log_level='INFO'):
     logger = logging.getLogger('discopy')
+    logger.propagate = False
     logger.setLevel(log_level)
     # create console handler
     ch = logging.StreamHandler()

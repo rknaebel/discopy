@@ -1,11 +1,13 @@
 import os
+from discopy.semi_utils import get_arguments
+import os
 
-from discopy.data.conll16 import get_conll_dataset
 from discopy.semi_utils import get_arguments
 
 args = get_arguments()
-
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+
+from discopy.data.conll16 import get_conll_dataset
 
 from tqdm import tqdm
 
@@ -60,14 +62,13 @@ if __name__ == '__main__':
     parses_test, pdtb_test = get_conll_dataset(args.conll, 'en.test', load_trees=False, connective_mapping=True)
     parses_blind, pdtb_blind = get_conll_dataset(args.conll, 'en.blind-test', load_trees=False, connective_mapping=True)
 
-
     logger.info('Init Parser...')
     parser = parsers.get(args.parser, LinParser)
     parser_path = args.dir
 
-    if args.train:
+    if args.fit:
         logger.info('Train end-to-end Parser...')
-        parser.train(pdtb_train, parses_train, pdtb_val, parses_val)
+        parser.fit(pdtb_train, parses_train, pdtb_val, parses_val)
         parser.save(os.path.join(args.dir))
     elif os.path.exists(args.dir):
         logger.info('Load pre-trained Parser...')

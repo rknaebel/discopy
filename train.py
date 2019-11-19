@@ -75,7 +75,7 @@ if __name__ == '__main__':
     parser_path = args.dir
 
     logger.info('Train end-to-end Parser...')
-    parser.train(pdtb_train, parses_train, pdtb_val, parses_val)
+    parser.fit(pdtb_train, parses_train, pdtb_val, parses_val)
     parser.save(os.path.join(args.dir))
 
     logger.info('extract discourse relations from test data')

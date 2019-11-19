@@ -34,7 +34,7 @@ def main():
         logger.info('load PDTB data')
         pdtb = [json.loads(s) for s in open(args.pdtb, 'r').readlines()]
         parses = json.loads(open(args.parses).read())
-        parser.train(pdtb, parses)
+        parser.fit(pdtb, parses)
         parser.save(args.dir)
     elif args.mode == 'run':
         documents = json.loads(open(args.parses, mode='rb').read())

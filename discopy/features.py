@@ -118,10 +118,15 @@ def get_connective_sentence_position(indices, ptree):
 
 
 def lca(ptree, leaf_index):
-    lca_loc = ptree.treeposition_spanning_leaves(leaf_index[0], leaf_index[-1] + 1)
-    if type(ptree[lca_loc]) == str:
-        lca_loc = lca_loc[:-1]
-    return lca_loc
+    try:
+        lca_loc = ptree.treeposition_spanning_leaves(leaf_index[0], leaf_index[-1] + 1)
+        if type(ptree[lca_loc]) == str:
+            lca_loc = lca_loc[:-1]
+        return lca_loc
+    except Exception as e:
+        print(ptree, leaf_index)
+        raise Exception(e)
+
 
 
 def get_pos_features(ptree, leaf_index, head, position):
