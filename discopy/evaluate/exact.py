@@ -33,6 +33,37 @@ def evaluate_conll_document(gold_conll_list, pred_conll_list, threshold=0.9):
     )
 
 
+def evaluate_explicit_arguments(gold_relations: dict, predicted_relations: dict, threshold=0.9):
+    results = []
+    for doc_id in gold_relations.keys():
+        gold_list = [r for r in gold_relations.get(doc_id, []) if r.is_explicit()]
+        predicted_list = [r for r in predicted_relations.get(doc_id, []) if r.is_explicit()]
+
+        connective_cm = evaluate_connectives(gold_list, predicted_list, threshold)
+        arg1_cm, arg2_cm, rel_arg_cm = evaluate_argument_extractor(gold_list, predicted_list, threshold)
+        sense_cm, alignment = evaluate_sense(gold_list, predicted_list, threshold)
+
+        results.append(
+            np.array([
+                connective_cm,
+                arg1_cm,
+                arg2_cm,
+                rel_arg_cm,
+                sense_cm,
+            ])
+        )
+    results = np.stack(results).sum(axis=0)
+    logger.info('==========================================================')
+    logger.info('Evaluation for EXPLICIT discourse relations:')
+    logger.info('==========================================================')
+    logger.info('Conn extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[0])))
+    logger.info('Arg1 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[1])))
+    logger.info('Arg2 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[2])))
+    logger.info('Concat(Arg1, Arg2) extractor: P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[3])))
+    logger.info('==========================================================')
+    return results
+
+
 def evaluate_all(gold_relations: dict, predicted_relations: dict, threshold=0.9):
     all_results = {}
     results = []
