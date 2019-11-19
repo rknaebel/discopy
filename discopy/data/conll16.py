@@ -1,10 +1,12 @@
 import logging
 import multiprocessing
+import os
 import ujson as json
 
+import benepar
 import nltk
 import spacy
-from benepar.spacy_plugin import BeneparComponent
+from tqdm import tqdm
 
 from discopy.conn_head_mapper import ConnHeadMapper
 
@@ -50,21 +52,25 @@ def get_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True
     return parses, pdtb
 
 
-def parse_sentence(nlp, sentence):
+def parse_sentence(nlp, ptree, sentence):
     words = [w[0] for w in sentence['words']]
     doc = nlp(words)
-    sent = list(doc.sents)[0]
     return {
         'dependencies': [(t.dep_, "{}-{}".format(t.head.text, t.head.i + 1), "{}-{}".format(t.text, t.i + 1)) for t in
-                         sent],
-        'parsetree': sent._.parse_string,
+                         doc],
+        'parsetree': ptree._pformat_flat('', '()', False),
         'words': [
             (w_orig[0], {
                 'CharacterOffsetBegin': w_orig[1]['CharacterOffsetBegin'],
                 'CharacterOffsetEnd': w_orig[1]['CharacterOffsetEnd'],
                 'Linkers': w_orig[1]['Linkers'],
-                'PartOfSpeech': w_doc.tag_
-            }) for w_doc, w_orig in zip(sent, sentence['words'])
+                'PartOfSpeech': w_doc.tag_,
+                'SimplePartOfSpeech': w_doc.pos_,
+                'Lemma': w_doc.lemma_,
+                'Shape': w_doc.shape_,
+                'EntIOB': w_doc.ent_iob_,
+                'EntType': w_doc.ent_type_,
+            }) for w_doc, w_orig in zip(doc, sentence['words'])
         ]
     }
     # return {
@@ -82,11 +88,29 @@ def parse_sentence(nlp, sentence):
 
 
 def get_conll_dataset_extended(data_path, mode, connective_mapping=True):
+    parses_path = '{}/{}/parses_extended.json'.format(data_path, mode)
+    print("get conll:", mode)
     parses, pdtb = get_conll_dataset(data_path, mode, False, connective_mapping)
-    nlp = spacy.load('en')
-    nlp.tokenizer = nlp.tokenizer.tokens_from_list
-    nlp.add_pipe(BeneparComponent("benepar_en2"))
-    for doc_id, doc in parses.items():
-        for sent_idx, sentence in enumerate(doc['sentences']):
-            doc['sentences'][sent_idx] = parse_sentence(nlp, sentence)
+    if os.path.exists(parses_path):
+        parses = json.load(open(parses_path, 'r'))
+    else:
+        print("load spacy")
+        nlp = spacy.load('en')
+        nlp.tokenizer = nlp.tokenizer.tokens_from_list
+        parser = benepar.Parser('benepar_en2')
+        print('start parsing')
+        for doc_id, doc in tqdm(parses.items(), desc='documents'):
+            ptrees = list(parser.parse_sents([[w[0] for w in s['words']] for s in doc['sentences']]))
+            for sent_idx, sentence in tqdm(enumerate(doc['sentences']), desc="sentences", leave=False):
+                doc['sentences'][sent_idx] = parse_sentence(nlp, ptrees[sent_idx], sentence)
+        json.dump(parses, open(parses_path, 'w'))
+
+    with multiprocessing.Pool(4) as pool:
+        args = [(doc_id, [s['parsetree'] for s in doc['sentences']])
+                for doc_id, doc in parses.items()]
+        parse_trees = pool.starmap(load_parse_trees, args, chunksize=5)
+    for doc_id, ptrees in parse_trees:
+        for sent_i, ptree in enumerate(ptrees):
+            parses[doc_id]['sentences'][sent_i]['parsetree'] = nltk.ParentedTree.convert(ptree)
+
     return parses, pdtb
