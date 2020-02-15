@@ -3,7 +3,7 @@ import ujson as json
 
 from discopy.data.conll16 import get_conll_dataset_extended
 from discopy.data.crawled import load_corpus
-from discopy.parsers.bilstm_args import NeuralTriConnectiveArgumentExtractor
+from discopy.parsers.tri_parser import NeuralTriConnectiveArgumentExtractor
 from discopy.semi_utils import get_arguments, get_relation_distances, eval_parser, combine_data
 from discopy.utils import init_logger
 

@@ -1,14 +1,13 @@
 import os
-import os
 import ujson as json
 
 import discopy.evaluate.exact
 from discopy.data.conll16 import get_conll_dataset_extended
 from discopy.data.crawled import load_corpus
-from discopy.parsers.bilstm_args import NeuralExplicitArgumentExtractor, NeuralConnectiveArgumentExtractor, \
-    NeuralTriConnectiveArgumentExtractor
+from discopy.parsers.bilstm_args import NeuralExplicitArgumentExtractor, NeuralConnectiveArgumentExtractor
 from discopy.parsers.gosh import GoshParser
 from discopy.parsers.lin import LinParser, LinArgumentParser
+from discopy.parsers.tri_parser import NeuralTriConnectiveArgumentExtractor
 from discopy.semi_utils import get_arguments
 from discopy.utils import init_logger
 
