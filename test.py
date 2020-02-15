@@ -1,6 +1,4 @@
 import os
-from discopy.semi_utils import get_arguments
-import os
 
 from discopy.semi_utils import get_arguments
 
@@ -72,7 +70,7 @@ if __name__ == '__main__':
         parser.save(os.path.join(args.dir))
     elif os.path.exists(args.dir):
         logger.info('Load pre-trained Parser...')
-        parser.load(args.dir, parses_train)
+        parser.load(args.dir)
     else:
         raise ValueError('Training and Loading not clear')
 
