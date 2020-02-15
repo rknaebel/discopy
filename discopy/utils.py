@@ -329,13 +329,27 @@ class ParsedRelation:
         def is_valid(self):
             return len(self.TokenList) > 0
 
+        def __eq__(self, other):
+            return self.TokenList == other.TokenList
+
+        def overlaps(self, span):
+            return any(i in self.TokenList for i in span.TokenList)
+
+    def __eq__(self, other):
+        return (self.Arg1 == other.Arg1) and (self.Arg2 == other.Arg2) and (self.Connective == other.Connective)
+
     def __init__(self):
         self.Connective = ParsedRelation.Span()
         self.Arg1 = ParsedRelation.Span()
         self.Arg2 = ParsedRelation.Span()
+        self.ArgConfidence = 0
         self.Type = ''
         self.Sense = ''
         self.ptree = None
+        self.doc_id = ''
+
+    def __hash__(self):
+        return hash(self.Connective.RawText + self.Arg1.RawText + self.Arg2.RawText)
 
     def to_dict(self):
         return {
@@ -345,19 +359,27 @@ class ParsedRelation:
             },
             'Arg1': {
                 'TokenList': self.Arg1.TokenList,
-                'RawText': self.Arg1.RawText
+                'RawText': self.Arg1.RawText,
             },
             'Arg2': {
                 'TokenList': self.Arg2.TokenList,
-                'RawText': self.Arg2.RawText
+                'RawText': self.Arg2.RawText,
+            },
+            'Confidence': {
+                'Arguments': self.ArgConfidence,
             },
             'Type': self.Type,
             'Sense': [self.Sense],
-            'ptree': self.ptree
+            'ptree': self.ptree,
+            'DocID': self.doc_id,
+            'ID': hash(self)
         }
 
     def is_valid(self):
-        return self.Arg1.is_valid() and self.Arg2.is_valid()
+        return (self.Arg1.is_valid()
+                and self.Arg2.is_valid()
+                and not self.Arg1.overlaps(self.Connective)
+                and not self.Arg2.overlaps(self.Connective))
 
     def to_conll(self):
         r = self.to_dict()
