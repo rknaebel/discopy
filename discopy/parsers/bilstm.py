@@ -1,17 +1,18 @@
 import logging
 import os
-import ujson as json
+import sys
 from collections import Counter
 
 import joblib
 import nltk
 
+from discopy.data.conll16 import get_conll_dataset
 from discopy.labeling.connective import ConnectiveClassifier
-from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, ArgumentExtractBiLSTMwithConn
-from discopy.parsers.utils import get_raw_tokens, get_token_list2
+from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, BiLSTMConnectiveArgumentExtractor
+from discopy.parsers.utils import get_token_list2, get_raw_tokens2
 from discopy.sense.explicit import ExplicitSenseClassifier
 from discopy.sense.nonexplicit import NonExplicitSenseClassifier
-from discopy.utils import init_logger
+from discopy.utils import init_logger, ParsedRelation
 
 logger = logging.getLogger('discopy')
 
@@ -95,7 +96,7 @@ class Relation:
         return r
 
 
-class AbstractBiLSTMDiscourseParser:
+class AbstractArgumentExtractor:
     def __init__(self):
         self.hidden_size = 128
         self.rnn_size = 128
@@ -120,7 +121,7 @@ class AbstractBiLSTMDiscourseParser:
         self.explicit_clf.save(path)
         self.non_explicit_clf.save(path)
 
-    def load(self, path, parses):
+    def load(self, path):
         if not os.path.exists(path):
             raise FileNotFoundError('Path not found')
         self.explicit_clf.load(path)
@@ -190,7 +191,7 @@ class AbstractBiLSTMDiscourseParser:
         return relations
 
 
-class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
+class BiLSTMDiscourseParser3(AbstractArgumentExtractor):
 
     def __init__(self, no_crf=False):
         super().__init__()
@@ -212,9 +213,8 @@ class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
         super().save(path)
         self.arg_labeler.save(path)
 
-    def load(self, path, parses):
-        super().load(path, parses)
-        self.arg_labeler.init_model(parses)
+    def load(self, path):
+        super().load(path)
         self.arg_labeler.load(path)
 
     def parse_arguments(self, doc):
@@ -226,16 +226,16 @@ class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
             relation = Relation()
             relation.Type = 'NonExplicit'
             relation.Arg1.TokenList = get_token_list2(doc_words, r.arg1)
-            relation.Arg1.RawText = get_raw_tokens(doc_words, r.arg1)
+            relation.Arg1.RawText = get_raw_tokens2(doc_words, r.arg1)
             relation.Arg2.TokenList = get_token_list2(doc_words, r.arg2)
-            relation.Arg2.RawText = get_raw_tokens(doc_words, r.arg2)
+            relation.Arg2.RawText = get_raw_tokens2(doc_words, r.arg2)
             if r.conn:
                 # TODO make more elegant... just some workaround
                 relation.Type = 'Explicit'
                 sent_id = Counter(i[3] for i in get_token_list2(doc_words, r.conn)).most_common(1)[0][0]
                 conn = [i[2] for i in get_token_list2(doc_words, r.conn) if i[3] == sent_id]
                 relation.Connective.TokenList = get_token_list2(doc_words, conn)
-                relation.Connective.RawText = get_raw_tokens(doc_words, conn)
+                relation.Connective.RawText = get_raw_tokens2(doc_words, conn)
             relations.append(relation)
         return relations
 
@@ -280,7 +280,7 @@ class BiLSTMDiscourseParser3(AbstractBiLSTMDiscourseParser):
         return relations
 
 
-class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
+class BiLSTMDiscourseParser2(AbstractArgumentExtractor):
 
     def __init__(self, no_crf=False):
         super().__init__()
@@ -300,9 +300,8 @@ class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
         super().save(path)
         self.arg_labeler.save(path)
 
-    def load(self, path, parses):
-        super().load(path, parses)
-        self.arg_labeler.init_model(parses)
+    def load(self, path):
+        super().load(path)
         self.arg_labeler.load(path)
 
     def parse_explicit_arguments(self, doc):
@@ -317,11 +316,11 @@ class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
             sent_id = Counter(i[3] for i in get_token_list2(doc_words, r.conn)).most_common(1)[0][0]
             conn = [i[2] for i in get_token_list2(doc_words, r.conn) if i[3] == sent_id]
             relation.Connective.TokenList = get_token_list2(doc_words, conn)
-            relation.Connective.RawText = get_raw_tokens(doc_words, conn)
+            relation.Connective.RawText = get_raw_tokens2(doc_words, conn)
             relation.Arg1.TokenList = get_token_list2(doc_words, r.arg1)
-            relation.Arg1.RawText = get_raw_tokens(doc_words, r.arg1)
+            relation.Arg1.RawText = get_raw_tokens2(doc_words, r.arg1)
             relation.Arg2.TokenList = get_token_list2(doc_words, r.arg2)
-            relation.Arg2.RawText = get_raw_tokens(doc_words, r.arg2)
+            relation.Arg2.RawText = get_raw_tokens2(doc_words, r.arg2)
             relations.append(relation)
         return relations
 
@@ -351,8 +350,8 @@ class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
             relation.Type = 'Implicit'
             relation.Arg1.TokenList = get_token_list2(doc_words, arg1_idxs)
             relation.Arg2.TokenList = get_token_list2(doc_words, arg2_idxs)
-            relation.Arg1.RawText = get_raw_tokens(doc_words, arg1_idxs)
-            relation.Arg2.RawText = get_raw_tokens(doc_words, arg2_idxs)
+            relation.Arg1.RawText = get_raw_tokens2(doc_words, arg1_idxs)
+            relation.Arg2.RawText = get_raw_tokens2(doc_words, arg2_idxs)
             relations.append(relation)
 
             token_id += len(sent['words'])
@@ -370,7 +369,7 @@ class BiLSTMDiscourseParser2(AbstractBiLSTMDiscourseParser):
         return relations
 
 
-class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
+class BiLSTMConnArgumentExtractor(AbstractArgumentExtractor):
     """
     Extracts explicit arguments based on the connective prediction
     """
@@ -378,11 +377,11 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
     def __init__(self, no_crf=False):
         super().__init__()
         self.connective_clf = ConnectiveClassifier()
-        self.arg_labeler = ArgumentExtractBiLSTMwithConn(window_length=self.window_length,
-                                                         hidden_dim=self.hidden_size,
-                                                         rnn_dim=self.rnn_size,
-                                                         no_rnn=False,
-                                                         no_dense=False, no_crf=no_crf)
+        self.arg_labeler = BiLSTMConnectiveArgumentExtractor(window_length=self.window_length,
+                                                             hidden_dim=self.hidden_size,
+                                                             rnn_dim=self.rnn_size,
+                                                             no_rnn=False,
+                                                             no_dense=False, no_crf=no_crf)
 
     def train(self, pdtb, parses, pdtb_val, parses_val):
         logger.info('Train Connective Classifier...')
@@ -401,10 +400,9 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
         self.connective_clf.save(path)
         self.arg_labeler.save(path)
 
-    def load(self, path, parses):
-        super().load(path, parses)
+    def load(self, path):
+        super().load(path)
         self.connective_clf.load(path)
-        self.arg_labeler.init_model(parses)
         self.arg_labeler.load(path)
 
     def parse_connectives(self, doc):
@@ -415,20 +413,16 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
 
         for sent_id, sent in enumerate(doc['sentences']):
             sent_len = len(sent['words'])
-            try:
-                ptree = nltk.ParentedTree.fromstring(sent['parsetree'])
-            except ValueError:
-                logger.warning('Failed to parse doc {} idx {}'.format(doc['DocID'], sent_id))
-                token_id += sent_len
-                continue
+            ptree = sent['parsetree']
             if not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 token_id += sent_len
+                sent_offset += sent_len
                 continue
 
             current_token = 0
             while current_token < sent_len:
-                relation = Relation()
+                relation = ParsedRelation()
                 relation.Type = 'Explicit'
                 connective, connective_confidence = self.connective_clf.get_connective(ptree, sent['words'],
                                                                                        current_token)
@@ -437,13 +431,13 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
                     token_id += 1
                     current_token += 1
                     continue
-                conn_idxs = [token_id + i for i in range(len(connective))]
+                conn_idxs = [sent_offset + i for i, c in connective]
                 relation.Connective.TokenList = get_token_list2(doc_words, conn_idxs)
-                relation.Connective.RawText = get_raw_tokens(doc_words, conn_idxs)
+                relation.Connective.RawText = get_raw_tokens2(doc_words, conn_idxs)
 
                 relations.append(relation)
-                token_id += len(connective)
-                current_token += len(connective)
+                token_id += 1
+                current_token += 1
             sent_offset += sent_len
         return relations
 
@@ -454,9 +448,9 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
                                                             max_distance=0.5)
         for relation, r in zip(relations, arguments_pred):
             relation.Arg1.TokenList = get_token_list2(doc_words, r.arg1)
-            relation.Arg1.RawText = get_raw_tokens(doc_words, r.arg1)
+            relation.Arg1.RawText = get_raw_tokens2(doc_words, r.arg1)
             relation.Arg2.TokenList = get_token_list2(doc_words, r.arg2)
-            relation.Arg2.RawText = get_raw_tokens(doc_words, r.arg2)
+            relation.Arg2.RawText = get_raw_tokens2(doc_words, r.arg2)
         return relations
 
     def parse_implicit_arguments(self, doc, relations):
@@ -485,8 +479,8 @@ class BiLSTMDiscourseParser1(AbstractBiLSTMDiscourseParser):
             relation.Type = 'Implicit'
             relation.Arg1.TokenList = get_token_list2(doc_words, arg1_idxs)
             relation.Arg2.TokenList = get_token_list2(doc_words, arg2_idxs)
-            relation.Arg1.RawText = get_raw_tokens(doc_words, arg1_idxs)
-            relation.Arg2.RawText = get_raw_tokens(doc_words, arg2_idxs)
+            relation.Arg1.RawText = get_raw_tokens2(doc_words, arg1_idxs)
+            relation.Arg2.RawText = get_raw_tokens2(doc_words, arg2_idxs)
             relations.append(relation)
 
             token_id += len(sent['words'])
@@ -509,18 +503,15 @@ if __name__ == "__main__":
     logger = init_logger()
     os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
-    pdtb_train = [json.loads(s) for s in
-                  open('/data/discourse/conll2016/en.train/relations.json', 'r').readlines()]
-    parses_train = json.loads(open('/data/discourse/conll2016/en.train/parses.json').read())
-    pdtb_val = [json.loads(s) for s in open('/data/discourse/conll2016/en.dev/relations.json', 'r').readlines()]
-    parses_val = json.loads(open('/data/discourse/conll2016/en.dev/parses.json').read())
-    pdtb_test = [json.loads(s) for s in open('/data/discourse/conll2016/en.test/relations.json', 'r').readlines()]
-    parses_test = json.loads(open('/data/discourse/conll2016/en.test/parses.json').read())
+    data_path = sys.argv[1]
+    parses_train, pdtb_train = get_conll_dataset(data_path, 'en.train', load_trees=False, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(data_path, 'en.dev', load_trees=False, connective_mapping=True)
+    parses_test, pdtb_test = get_conll_dataset(data_path, 'en.test', load_trees=False, connective_mapping=True)
 
-    parser = BiLSTMDiscourseParser1()
+    parser = BiLSTMConnArgumentExtractor()
     logger.info('Train Parser')
-    parser.load('bilstm-tmp', parses_train)
-    # parser.train(pdtb_train, parses_train, pdtb_val, parses_val)
+    parser.load('bilstm-tmp')
+    parser.train(pdtb_train, parses_train, pdtb_val, parses_val)
     # parser.save('bilstm-tmp')
     logger.info('Evaluation on VAL')
     parser.score(pdtb_val, parses_val)

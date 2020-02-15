@@ -1,12 +1,16 @@
 import argparse
+import logging
 import multiprocessing as mp
 import ujson as json
+from collections import Counter
 
 import numpy as np
 
 import discopy.evaluate.exact
 import discopy.parsers.lin
 import discopy.utils
+
+logger = logging.getLogger('discopy.semi-utils')
 
 
 def get_arguments():
@@ -45,6 +49,8 @@ def get_arguments():
                                  default=100, type=int)
     argument_parser.add_argument("--estimators", help="",
                                  default=1, type=int)
+    argument_parser.add_argument("--window-size", help="",
+                                 default=150, type=int)
     argument_parser.add_argument("--skip-eval", help="",
                                  action='store_true')
     return argument_parser.parse_args()
@@ -87,3 +93,57 @@ def load_corpus(path):
         parses_semi = dict(pool.map(fn, f))
 
     return parses_semi
+
+
+def get_explicit_stats(relations):
+    distances = []
+    spans = []
+    spans_a1 = []
+    spans_a2 = []
+    for r in relations:
+        arg1 = [i[2] for i in r['Arg1']['TokenList']]
+        arg2 = [i[2] for i in r['Arg2']['TokenList']]
+        spans_a1.append(max(arg1) - min(arg1))
+        spans_a2.append(max(arg2) - min(arg2))
+        spans.append(max(arg1 + arg2) - min(arg1 + arg2))
+        if max(arg1) < min(arg2):
+            distances.append('P')
+        elif max(arg2) < min(arg1):
+            distances.append('N')
+        elif min(arg1) < min(arg2) < max(arg1):
+            distances.append('A1Surround')
+        elif min(arg2) < min(arg1) < max(arg2):
+            distances.append('A2Surround')
+        else:
+            distances.append('Other')
+    return distances, spans, spans_a1, spans_a2
+
+
+def eval_parser(mode, parser, parses, relations):
+    logger.info('EVAL component ({})'.format(mode))
+    parser.score(relations, parses)
+    logger.info('EXTRACT discourse relations from {} data'.format(mode))
+    pred = parser.parse_documents(parses)
+    logger.info('DISTRIBUTION info for {}'.format(mode))
+    logger.info(get_relation_distances([r for doc in pred.values() for r in doc['Relations']]))
+    evaluate_parser_explicit(relations, pred, 0.7)
+    evaluate_parser_explicit(relations, pred, 0.8)
+    evaluate_parser_explicit(relations, pred, 0.9)
+
+
+def get_relation_distances(relations):
+    explicits = [r for r in relations if r['Type'] == 'Explicit']
+    distances, _, _, _ = get_explicit_stats(explicits)
+    return Counter(distances)
+
+
+def evaluate_parser_explicit(pdtb_gold, pdtb_pred, threshold=0.7):
+    gold_relations = discopy.utils.load_relations(pdtb_gold)
+    pred_relations = discopy.utils.load_relations([r for doc in pdtb_pred.values() for r in doc['Relations']])
+    return discopy.evaluate.exact.evaluate_explicit_arguments(gold_relations, pred_relations, threshold=threshold)
+
+
+def combine_data(parse_sets, relation_sets):
+    parses = {doc_id: doc for parses in parse_sets for doc_id, doc in parses.items()}
+    relations = [r for relations in relation_sets for r in relations]
+    return parses, relations

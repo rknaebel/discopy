@@ -54,7 +54,7 @@ def evaluate_explicit_arguments(gold_relations: dict, predicted_relations: dict,
         )
     results = np.stack(results).sum(axis=0)
     logger.info('==========================================================')
-    logger.info('Evaluation for EXPLICIT discourse relations:')
+    logger.info('Evaluation for EXPLICIT discourse relations ({}):'.format(threshold))
     logger.info('==========================================================')
     logger.info('Conn extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[0])))
     logger.info('Arg1 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*compute_prf(*results[1])))

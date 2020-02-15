@@ -3,17 +3,19 @@ import os
 from collections import Counter
 
 import numpy as np
-from keras.regularizers import l2
-from sklearn.utils import compute_class_weight
+from tensorflow.keras.layers import Layer
+from tensorflow.keras.optimizers import Adam
+from tensorflow.python.keras.regularizers import l2
 
 logger = logging.getLogger('discopy')
 
-from keras import Input, Model
-from keras.layers import Bidirectional, Dense, Dropout, SpatialDropout1D
-from keras.layers import CuDNNLSTM as LSTM
+from tensorflow.keras import Input, Model
+from tensorflow.keras.layers import Bidirectional, Dense, Dropout, SpatialDropout1D
 
 
 import tensorflow as tf
+import tensorflow_hub as hub
+import tensorflow.keras.backend as K
 
 
 def get_class_weights(y, smooth_factor=0.0):
@@ -34,13 +36,14 @@ def get_class_weights(y, smooth_factor=0.0):
 
 def get_balanced_class_weights(y):
     y = y.argmax(-1).flatten()
-    return get_class_weights(y, 0.1)
+    return get_class_weights(y, 0)
 
 
 def class_weighted_loss(class_weights):
     def loss(onehot_labels, logits):
         c_weights = np.array([class_weights[i] for i in range(4)])
-        unweighted_losses = tf.nn.softmax_cross_entropy_with_logits_v2(labels=[onehot_labels], logits=[logits])
+        unweighted_losses = tf.compat.v1.nn.softmax_cross_entropy_with_logits_v2(labels=[onehot_labels],
+                                                                                 logits=[logits])
         weights = tf.reduce_sum(tf.multiply(onehot_labels, c_weights), axis=-1)
         weighted_losses = unweighted_losses * weights  # reduce the result to get your final loss
         total_loss = tf.reduce_mean(weighted_losses)
@@ -49,17 +52,56 @@ def class_weighted_loss(class_weights):
     return loss
 
 
+class ElmoEmbeddingLayer(Layer):
+    def __init__(self, vocab, batch_size, max_len, **kwargs):
+        self.trainable = True
+        self.vocab = vocab
+        self.batch_size = batch_size
+        self.max_len = max_len
+        super(ElmoEmbeddingLayer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        self.ipt_shape = input_shape
+        self.elmo = hub.Module('https://tfhub.dev/google/elmo/2', trainable=self.trainable,
+                               name="{}_module".format(self.name))
+        mapping_string = [word for (word, word_idx) in sorted(self.vocab.items(), key=lambda x: x[1])]
+        self.table = tf.contrib.lookup.index_to_string_table_from_tensor(mapping_string, default_value="UKN")
+        self.trainable_weights += tf.trainable_variables(scope="^{}_module/.*".format(self.name))
+        K.get_session().run(tf.tables_initializer(name='init_all_tables'))
+        super(ElmoEmbeddingLayer, self).build(input_shape)
+
+    def call(self, x, mask=None):
+        result = self.elmo(
+            inputs={
+                "tokens": self.table.lookup(tf.cast(x, tf.int64)),
+                "sequence_len": self.batch_size * [self.max_len],
+            },
+            as_dict=True,
+            signature='tokens',
+        )['elmo']
+        return result
+
+    def compute_mask(self, inputs, mask=None):
+        # return K.not_equal(self.table.lookup(tf.cast(inputs, tf.int64)), '--PAD--')
+        return None
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], input_shape[1], 1024)
+
+
 class BiLSTMx:
 
     def __init__(self, embd_layer, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, nb_classes):
         x = Input(shape=(max_seq_len,), name='window-input')
         y = embd_layer(x)
         y = SpatialDropout1D(0.2)(y)
+        y = Dense(hidden_dim, activation='relu')(y)
         if not no_rnn:
-            y = Bidirectional(LSTM(rnn_dim, return_sequences=True, name='hidden-rnn'))(y)
+            y = Bidirectional(tf.compat.v1.keras.layers.CuDNNGRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
+            y = Bidirectional(tf.compat.v1.keras.layers.CuDNNGRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
         if not no_dense:
             y = Dense(hidden_dim, activation='relu', name='hidden-dense', kernel_regularizer=l2(0.001))(y)
-            y = Dropout(0.2)(y)
+        y = Dropout(0.2)(y)
         y = Dense(nb_classes, activation='softmax', name='args')(y)
 
         self.x = x
@@ -68,7 +110,8 @@ class BiLSTMx:
         self.model = Model(self.x, self.y)
 
     def compile(self, class_weights):
-        self.model.compile(loss=class_weighted_loss(class_weights), optimizer='adam',
+        optimizer = Adam(lr=0.001, amsgrad=True)
+        self.model.compile(loss=class_weighted_loss(class_weights), optimizer=optimizer,
                            metrics=['accuracy'])
 
     def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size, callbacks):
@@ -80,14 +123,11 @@ class BiLSTMx:
                        verbose=1,
                        callbacks=callbacks)
 
-    def predict(self, X, batch_size=64):
+    def predict(self, X, batch_size=512):
         return self.model.predict(X, batch_size=batch_size, verbose=0)
 
-    def summary(self, fh=None):
-        if fh:
-            self.model.summary(print_fn=lambda line: fh.write("{}\n".format(line)))
-        else:
-            self.model.summary()
+    def summary(self):
+        self.model.summary(print_fn=logger.info)
 
 
 def get_coefs(word, *arr):

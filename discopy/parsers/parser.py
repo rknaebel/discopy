@@ -18,7 +18,6 @@ class AbstractBaseParser(object):
     def parse_documents(self, documents, limit=0):
         doc_relations = {}
         for idx, (doc_id, doc) in tqdm(enumerate(documents.items()), total=len(documents)):
-            # for idx, (doc_id, doc) in enumerate(documents.items()):
             if limit and idx > limit:
                 break
             parsed_relations = self.parse_doc(doc)
