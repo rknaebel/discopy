@@ -4,11 +4,12 @@ import sys
 from collections import Counter
 
 import joblib
-from discopy.labeling.neural.elmo_arg_extract import ElmoConnectiveArgumentExtractor, ElmoArgumentExtract
+import numpy as np
 
 from discopy.data.conll16 import get_conll_dataset
 from discopy.labeling.connective import ConnectiveClassifier
-from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, BiLSTMConnectiveArgumentExtractor
+from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, BiLSTMConnectiveArgumentExtractor, \
+    BertConnectiveArgumentExtractor, BertArgumentExtractor
 from discopy.parsers.parser import AbstractBaseParser
 from discopy.parsers.utils import get_token_list2, get_raw_tokens2
 from discopy.utils import init_logger, ParsedRelation
@@ -106,16 +107,16 @@ class AbstractBiLSTMDiscourseParser(AbstractBaseParser):
 
 class NeuralExplicitArgumentExtractor(AbstractBiLSTMDiscourseParser):
 
-    def __init__(self, hidden_size=256, rnn_size=256, window_length=100, elmo=False, no_crf=False):
+    def __init__(self, hidden_size=256, rnn_size=256, window_length=100, no_crf=False, use_bert=False):
         super().__init__(hidden_size, rnn_size, window_length)
-        if elmo:
-            self.arg_labeler = ElmoArgumentExtract(window_length=self.window_length,
-                                                   hidden_dim=self.hidden_size,
-                                                   rnn_dim=self.rnn_size,
-                                                   no_rnn=False,
-                                                   no_dense=False,
-                                                   no_crf=no_crf,
-                                                   explicits_only=True)
+        if use_bert:
+            self.arg_labeler = BertArgumentExtractor(window_length=self.window_length,
+                                                     hidden_dim=self.hidden_size,
+                                                     rnn_dim=self.rnn_size,
+                                                     no_rnn=False,
+                                                     no_dense=False,
+                                                     no_crf=no_crf,
+                                                     explicits_only=True)
         else:
             self.arg_labeler = ArgumentExtractBiLSTM(window_length=self.window_length,
                                                      hidden_dim=self.hidden_size,
@@ -125,9 +126,9 @@ class NeuralExplicitArgumentExtractor(AbstractBiLSTMDiscourseParser):
                                                      no_crf=no_crf,
                                                      explicits_only=True)
 
-    def fit(self, pdtb, parses, pdtb_val, parses_val, path='', epochs=10):
+    def fit(self, pdtb, parses, pdtb_val, parses_val, path=None, epochs=10):
         logger.info('Train Argument Extractor...')
-        if not os.path.exists(path):
+        if path and not os.path.exists(path):
             os.makedirs(path)
         self.arg_labeler.fit(pdtb, parses, pdtb_val, parses_val, save_path=path, epochs=epochs)
 
@@ -152,8 +153,8 @@ class NeuralExplicitArgumentExtractor(AbstractBiLSTMDiscourseParser):
     def parse_explicit_arguments(self, doc):
         relations = []
         doc_words = [(w, s_i, w_i) for s_i, s in enumerate(doc['sentences']) for w_i, w in enumerate(s['words'])]
-        arguments_pred = self.arg_labeler.extract_arguments([w[0][0] for w in doc_words],
-                                                            strides=1, max_distance=0.5)
+        embds = np.concatenate([s['bert'] for s in doc['sentences']])
+        arguments_pred = self.arg_labeler.extract_arguments(embds, strides=1, max_distance=0.5)
         for r in arguments_pred:
             if not r.conn:
                 continue
@@ -183,11 +184,11 @@ class NeuralConnectiveArgumentExtractor(AbstractBiLSTMDiscourseParser):
     Extracts explicit arguments based on the connective prediction
     """
 
-    def __init__(self, hidden_size=256, rnn_size=256, window_length=100, elmo=False, no_crf=False):
+    def __init__(self, hidden_size=256, rnn_size=256, window_length=100, no_crf=False, use_bert=False):
         super().__init__(hidden_size, rnn_size, window_length)
         self.connective_clf = ConnectiveClassifier()
-        if elmo:
-            self.arg_labeler = ElmoConnectiveArgumentExtractor(window_length=self.window_length,
+        if use_bert:
+            self.arg_labeler = BertConnectiveArgumentExtractor(window_length=self.window_length,
                                                                hidden_dim=self.hidden_size,
                                                                rnn_dim=self.rnn_size,
                                                                no_rnn=False,
@@ -228,7 +229,7 @@ class NeuralConnectiveArgumentExtractor(AbstractBiLSTMDiscourseParser):
         for sent_id, sent in enumerate(doc['sentences']):
             sent_len = len(sent['words'])
             ptree = sent['parsetree']
-            if not ptree.leaves():
+            if not ptree or not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 token_id += sent_len
                 sent_offset += sent_len
@@ -257,8 +258,8 @@ class NeuralConnectiveArgumentExtractor(AbstractBiLSTMDiscourseParser):
 
     def parse_explicit_arguments(self, doc, relations):
         doc_words = [(w, s_i, w_i) for s_i, s in enumerate(doc['sentences']) for w_i, w in enumerate(s['words'])]
-        arguments_pred = self.arg_labeler.extract_arguments([w[0][0] for w in doc_words],
-                                                            [r.to_dict() for r in relations])
+        embds = np.concatenate([s['bert'] for s in doc['sentences']])
+        arguments_pred = self.arg_labeler.extract_arguments(embds, [r.to_dict() for r in relations])
         for relation, r in zip(relations, arguments_pred):
             relation.Arg1.TokenList = get_token_list2(doc_words, r.arg1)
             relation.Arg1.RawText = get_raw_tokens2(doc_words, r.arg1)

@@ -3,7 +3,6 @@ import os
 from collections import Counter
 
 import numpy as np
-from tensorflow.keras.layers import Layer
 from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.regularizers import l2
 
@@ -14,8 +13,6 @@ from tensorflow.keras.layers import Bidirectional, Dense, Dropout, SpatialDropou
 
 
 import tensorflow as tf
-import tensorflow_hub as hub
-import tensorflow.keras.backend as K
 
 
 def get_class_weights(y, smooth_factor=0.0):
@@ -52,43 +49,6 @@ def class_weighted_loss(class_weights):
     return loss
 
 
-class ElmoEmbeddingLayer(Layer):
-    def __init__(self, vocab, batch_size, max_len, **kwargs):
-        self.trainable = True
-        self.vocab = vocab
-        self.batch_size = batch_size
-        self.max_len = max_len
-        super(ElmoEmbeddingLayer, self).__init__(**kwargs)
-
-    def build(self, input_shape):
-        self.ipt_shape = input_shape
-        self.elmo = hub.Module('https://tfhub.dev/google/elmo/2', trainable=self.trainable,
-                               name="{}_module".format(self.name))
-        mapping_string = [word for (word, word_idx) in sorted(self.vocab.items(), key=lambda x: x[1])]
-        self.table = tf.contrib.lookup.index_to_string_table_from_tensor(mapping_string, default_value="UKN")
-        self.trainable_weights += tf.trainable_variables(scope="^{}_module/.*".format(self.name))
-        K.get_session().run(tf.tables_initializer(name='init_all_tables'))
-        super(ElmoEmbeddingLayer, self).build(input_shape)
-
-    def call(self, x, mask=None):
-        result = self.elmo(
-            inputs={
-                "tokens": self.table.lookup(tf.cast(x, tf.int64)),
-                "sequence_len": self.batch_size * [self.max_len],
-            },
-            as_dict=True,
-            signature='tokens',
-        )['elmo']
-        return result
-
-    def compute_mask(self, inputs, mask=None):
-        # return K.not_equal(self.table.lookup(tf.cast(inputs, tf.int64)), '--PAD--')
-        return None
-
-    def compute_output_shape(self, input_shape):
-        return (input_shape[0], input_shape[1], 1024)
-
-
 class BiLSTMx:
 
     def __init__(self, embd_layer, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, nb_classes):
@@ -97,8 +57,8 @@ class BiLSTMx:
         y = SpatialDropout1D(0.2)(y)
         y = Dense(hidden_dim, activation='relu')(y)
         if not no_rnn:
-            y = Bidirectional(tf.compat.v1.keras.layers.CuDNNGRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
-            y = Bidirectional(tf.compat.v1.keras.layers.CuDNNGRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
+            y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
+            y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
         if not no_dense:
             y = Dense(hidden_dim, activation='relu', name='hidden-dense', kernel_regularizer=l2(0.001))(y)
         y = Dropout(0.2)(y)
@@ -124,6 +84,42 @@ class BiLSTMx:
                        callbacks=callbacks)
 
     def predict(self, X, batch_size=512):
+        return self.model.predict(X, batch_size=batch_size, verbose=0)
+
+    def summary(self):
+        self.model.summary(print_fn=logger.info)
+
+
+class BertBiLSTMx:
+
+    def __init__(self, embd_dim, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, nb_classes):
+        x = y = Input(shape=(max_seq_len, embd_dim), name='window-input')
+        # y = SpatialDropout1D(0.2)(x)
+        y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
+        # y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
+        # y = Dropout(0.2)(y)
+        y = Dense(nb_classes, activation='softmax', name='args')(y)
+
+        self.x = x
+        self.y = y
+
+        self.model = Model(self.x, self.y)
+
+    def compile(self, class_weights):
+        optimizer = Adam(lr=0.001, amsgrad=True)
+        self.model.compile(loss=class_weighted_loss(class_weights), optimizer=optimizer,
+                           metrics=['accuracy'])
+
+    def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size, callbacks):
+        self.model.fit(x_train, y_train,
+                       validation_data=(x_val, y_val),
+                       epochs=epochs,
+                       batch_size=batch_size,
+                       shuffle=True,
+                       verbose=1,
+                       callbacks=callbacks)
+
+    def predict(self, X, batch_size=128):
         return self.model.predict(X, batch_size=batch_size, verbose=0)
 
     def summary(self):

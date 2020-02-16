@@ -209,3 +209,124 @@ def reduce_relation_predictions(relations, max_distance=0.5):
     combined = [r for r in combined if r.arg1 and r.arg2]
 
     return combined
+
+
+#
+# BERT EXTENSION
+#
+def extract_document_features_bert(doc, relations):
+    words = np.concatenate([s['bert'] for s in doc['sentences']])
+    doc_labels = []
+    for r in relations:
+        r_labels = []
+        arg1_idxs = {t[2] for t in r['Arg1']['TokenList']}
+        arg2_idxs = {t[2] for t in r['Arg2']['TokenList']}
+        conn_idxs = {t[2] for t in r['Connective']['TokenList']}
+        for w_i in range(len(words)):
+            if w_i in arg1_idxs:
+                r_labels.append(1)
+            elif w_i in arg2_idxs:
+                r_labels.append(2)
+            elif w_i in conn_idxs:
+                r_labels.append(3)
+            else:
+                r_labels.append(0)
+        doc_labels.append(np.array(r_labels))
+    return {
+        'Relations': np.array(doc_labels),
+        'Words': np.array(words),
+    }
+
+
+def extract_document_training_windows_bert(document, size=100, positives_only=False):
+    left_side = size // 2
+    right_size = size - left_side
+    repeats = 5
+
+    hashes = np.pad(document['Words'], mode='constant', pad_width=((size, size), (0, 0)), constant_values=0)
+    relations = document['Relations']
+    if len(relations):
+        relations = np.pad(relations, ((0, 0), (size, size)), mode='constant', constant_values=0)
+
+        centroids = relations.argmax(1)
+        pos_word_window = np.zeros((len(relations) * repeats, size, hashes.shape[1]), dtype=float)
+        pos_rel_window = np.zeros((len(relations) * repeats, size), dtype=int)
+        i = 0
+        for relation, centroid in zip(relations, centroids):
+            pos_word_window[i, :] = hashes[centroid - 2 - left_side:centroid - 2 + right_size]
+            pos_rel_window[i, :] = relation[centroid - 2 - left_side:centroid - 2 + right_size]
+            i += 1
+            pos_word_window[i, :] = hashes[centroid - 1 - left_side:centroid - 1 + right_size]
+            pos_rel_window[i, :] = relation[centroid - 1 - left_side:centroid - 1 + right_size]
+            i += 1
+            pos_word_window[i, :] = hashes[centroid - left_side:centroid + right_size]
+            pos_rel_window[i, :] = relation[centroid - left_side:centroid + right_size]
+            i += 1
+            pos_word_window[i, :] = hashes[centroid + 1 - left_side:centroid + 1 + right_size]
+            pos_rel_window[i, :] = relation[centroid + 1 - left_side:centroid + 1 + right_size]
+            i += 1
+            pos_word_window[i, :] = hashes[centroid + 2 - left_side:centroid + 2 + right_size]
+            pos_rel_window[i, :] = relation[centroid + 2 - left_side:centroid + 2 + right_size]
+            i += 1
+        if not positives_only:
+            # print(hashes)
+            centroids_mask = np.zeros(len(hashes))
+            centroids_mask[:size] = 1
+            centroids_mask[-size:] = 1
+            for r in range(repeats - 1):
+                centroids_mask[centroids - r] = 1
+                centroids_mask[centroids + r] = 1
+
+            non_centroids = np.arange(len(centroids_mask))[centroids_mask == 0]
+            # print(non_centroids)
+            neg_word_window = np.zeros((len(non_centroids), size, hashes.shape[1]), dtype=float)
+            neg_rel_window = np.zeros((len(non_centroids), size), dtype=int)
+            for i, centroid in enumerate(non_centroids):
+                neg_word_window[i, :] = hashes[centroid - left_side:centroid + right_size]
+
+            neg_idxs = np.random.permutation(len(neg_word_window))[:len(pos_word_window)]
+            neg_word_window = neg_word_window[neg_idxs]
+            neg_rel_window = neg_rel_window[neg_idxs]
+
+            X = np.concatenate([pos_word_window, neg_word_window])
+            y = np.concatenate([pos_rel_window, neg_rel_window])
+        else:
+            X = pos_word_window
+            y = pos_rel_window
+    else:
+        return [], []
+
+    y = np.clip(y, 0, 3)
+    y = (np.arange(4) == y[..., None]).astype(bool)
+    return X, y
+
+
+def generate_pdtb_features_bert(pdtb, parses, window_length, explicits_only=False, positives_only=False):
+    document_features = {}
+    pdtb_group = group_by_doc_id(pdtb, explicits_only)
+    for doc_id, doc in parses.items():
+        document_features[doc_id] = extract_document_features_bert(doc, pdtb_group[doc_id])
+
+    X, y = [], []
+    for doc_id, features in document_features.items():
+        X_doc, y_doc = extract_document_training_windows_bert(features, size=window_length,
+                                                              positives_only=positives_only)
+        if len(X_doc) and len(y_doc):
+            X.append(X_doc)
+            y.append(y_doc)
+
+    X = np.concatenate(X)
+    y = np.concatenate(y)
+    return X, y
+
+
+def extract_windows_bert(tokens, window_length, strides, offset):
+    nb_tokens = len(tokens)
+    tokens = np.pad(tokens, ((window_length, window_length), (0, 0)), mode='constant', constant_values=0)
+    windows = []
+    for i in range(0, nb_tokens, strides):
+        window = tokens[i + window_length - offset:i + 2 * window_length - offset]
+        windows.append(window)
+    windows = np.stack(windows)
+
+    return windows
