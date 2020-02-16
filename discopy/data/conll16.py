@@ -4,6 +4,7 @@ import os
 import ujson as json
 
 import benepar
+import joblib
 import nltk
 import spacy
 from tqdm import tqdm
@@ -49,6 +50,16 @@ def get_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True
             r['Connective']['CharacterSpanList'] = [
                 [r['Connective']['TokenList'][0][0], r['Connective']['TokenList'][-1][1]]]
 
+    return parses, pdtb
+
+
+def get_conll_bert_dataset(data_path, mode, load_trees=False, connective_mapping=True):
+    parses, pdtb = get_conll_dataset(data_path, mode, load_trees, connective_mapping)
+    bert_path = os.path.join(data_path, mode, 'bert.joblib')
+    bert_embeddings = joblib.load(bert_path)
+    for doc_id in parses.keys():
+        for sent, sent_bert in zip(parses[doc_id]['sentences'], bert_embeddings[doc_id]):
+            sent['bert'] = sent_bert
     return parses, pdtb
 
 
