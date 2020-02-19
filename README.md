@@ -40,6 +40,11 @@ python3 main.py --mode eval --pdtb path/dev/relations.json --out output.json
 ```
 
 
+### Semi supervised Tri Training
+```
+python3 self_baseline.py --dir exp_tri --conll /data/discourse/conll2016/ --train --gpu 0
+```
+
 ## Components
 
 

@@ -1,15 +1,14 @@
 import argparse
 import os
-import ujson as json
+
+from discopy.data.conll16 import get_conll_dataset
+from discopy.parsers import get_parser
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 from tqdm import tqdm
 
 import discopy.evaluate.exact
-from discopy.parsers.gosh import GoshParser
-from discopy.parsers.lin import LinParser
-# from discopy.parsers.bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
 from discopy.utils import init_logger
 
 argument_parser = argparse.ArgumentParser()
@@ -52,27 +51,14 @@ def evaluate_parser(pdtb_gold, pdtb_pred, threshold=0.7):
     return discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, threshold=threshold)
 
 
-parsers = {
-    'lin': LinParser(),
-    'gosh': GoshParser(),
-    # 'bilstm1': BiLSTMDiscourseParser1(),
-    # 'bilstm2': BiLSTMDiscourseParser2(),
-    # 'bilstm3': BiLSTMDiscourseParser3(),
-}
-
 if __name__ == '__main__':
-    pdtb_train = [json.loads(s) for s in open(os.path.join(args.conll, 'en.train/relations.json'), 'r')]
-    parses_train = json.loads(open(os.path.join(args.conll, 'en.train/parses.json'), 'r').read())
-
-    pdtb_val = [json.loads(s) for s in open(os.path.join(args.conll, 'en.dev/relations.json'), 'r')]
-    parses_val = json.loads(open(os.path.join(args.conll, 'en.dev/parses.json'), 'r').read())
-
-    pdtb_test = [json.loads(s) for s in open(os.path.join(args.conll, 'en.test/relations.json'), 'r')]
-    parses_test = json.loads(open(os.path.join(args.conll, 'en.test/parses.json'), 'r').read())
+    parses_train, pdtb_train = get_conll_dataset(args.conll, 'en.train', load_trees=True, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(args.conll, 'en.dev', load_trees=True, connective_mapping=True)
+    parses_test, pdtb_test = get_conll_dataset(args.conll, 'en.test', load_trees=True, connective_mapping=True)
+    parses_blind, pdtb_blind = get_conll_dataset(args.conll, 'en.blind-test', load_trees=True, connective_mapping=True)
 
     logger.info('Init Parser...')
-    parser = parsers.get(args.parser, LinParser)
-    parser_path = args.dir
+    parser = get_parser(args.parser)
 
     logger.info('Train end-to-end Parser...')
     parser.fit(pdtb_train, parses_train, pdtb_val, parses_val)

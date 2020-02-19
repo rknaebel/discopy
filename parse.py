@@ -2,14 +2,14 @@ import argparse
 import os
 from pprint import pprint
 
+from discopy.parsers import get_parser
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import sys
 import benepar
 import spacy
 from benepar.spacy_plugin import BeneparComponent
 from discopy.utils import init_logger
-
-from discopy.parsers.lin import LinParser
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--dir", help="",
@@ -76,7 +76,7 @@ def parse_text(text):
 
 def main():
     logger.info('Init Parser...')
-    parser = LinParser()
+    parser = get_parser('lin')
 
     logger.info('Load pre-trained Parser...')
     parser.load(args.dir)

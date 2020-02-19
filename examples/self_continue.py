@@ -14,9 +14,7 @@ if __name__ == '__main__':
     logger = init_logger(path=os.path.join(args.dir, 'continue.log'))
 
     logger.info('Init Parser...')
-    nea_parser = NeuralExplicitArgumentExtractor(hidden_size=256,
-                                                 rnn_size=512,
-                                                 window_length=args.window_size)
+    nea_parser = NeuralExplicitArgumentExtractor(hidden_size=256, rnn_size=512, window_length=args.window_size)
     parser_path = args.dir
 
     parses_train, pdtb_train = get_conll_dataset_extended(args.conll, 'en.train', connective_mapping=True)

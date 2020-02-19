@@ -1,24 +1,20 @@
 import os
 
+from tqdm import tqdm
+
+from discopy.parsers import get_parser
 from discopy.semi_utils import get_arguments
 
 args = get_arguments()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 from discopy.data.conll16 import get_conll_dataset
-
-from tqdm import tqdm
-
-import discopy.evaluate.exact
-from discopy.parsers.lin import LinParser, LinArgumentParser
-from discopy.parsers.gosh import GoshParser
-# from discopy.parsers.bilstm import BiLSTMDiscourseParser1, BiLSTMDiscourseParser2, BiLSTMDiscourseParser3
 from discopy.utils import init_logger
-
+import discopy.evaluate.exact
 
 os.makedirs(args.dir, exist_ok=True)
 
-logger = init_logger(os.path.join(args.dir, 'self.log'))
+logger = init_logger()
 
 
 def extract_discourse_relations(parser, parses):
@@ -45,23 +41,14 @@ def evaluate_parser(pdtb_gold, pdtb_pred, threshold=0.7):
     return discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, threshold=threshold)
 
 
-parsers = {
-    'lin': LinParser(),
-    'lin-arg': LinArgumentParser(),
-    'gosh': GoshParser(),
-    # 'bilstm1': BiLSTMDiscourseParser1(),
-    # 'bilstm2': BiLSTMDiscourseParser2(),
-    # 'bilstm3': BiLSTMDiscourseParser3(),
-}
-
 if __name__ == '__main__':
-    parses_train, pdtb_train = get_conll_dataset(args.conll, 'en.train', load_trees=False, connective_mapping=True)
-    parses_val, pdtb_val = get_conll_dataset(args.conll, 'en.dev', load_trees=False, connective_mapping=True)
-    parses_test, pdtb_test = get_conll_dataset(args.conll, 'en.test', load_trees=False, connective_mapping=True)
-    parses_blind, pdtb_blind = get_conll_dataset(args.conll, 'en.blind-test', load_trees=False, connective_mapping=True)
+    parses_train, pdtb_train = get_conll_dataset(args.conll, 'en.train', load_trees=True, connective_mapping=True)
+    parses_val, pdtb_val = get_conll_dataset(args.conll, 'en.dev', load_trees=True, connective_mapping=True)
+    parses_test, pdtb_test = get_conll_dataset(args.conll, 'en.test', load_trees=True, connective_mapping=True)
+    parses_blind, pdtb_blind = get_conll_dataset(args.conll, 'en.blind-test', load_trees=True, connective_mapping=True)
 
     logger.info('Init Parser...')
-    parser = parsers.get(args.parser, LinParser)
+    parser = get_parser(args.parser)
     parser_path = args.dir
 
     if args.fit:

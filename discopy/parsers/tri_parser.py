@@ -4,12 +4,12 @@ import os
 
 import joblib
 import numpy as np
-from discopy.parser import DiscourseParser
 from tqdm import tqdm
 
 from discopy.labeling.connective import ConnectiveClassifier
 from discopy.labeling.neural.arg_extract import BiLSTMConnectiveArgumentExtractor
 from discopy.parsers.bilstm_args import NeuralConnectiveArgumentExtractor
+from discopy.parsers.parser import AbstractBaseParser
 from discopy.parsers.utils import get_token_list2, get_raw_tokens2
 from discopy.utils import bootstrap_dataset, ParsedRelation
 
@@ -19,13 +19,13 @@ logger = logging.getLogger('discopy')
 class TriDiscourseParser(object):
 
     def __init__(self):
-        self.models = [DiscourseParser() for _ in range(3)]
+        self.models = [AbstractBaseParser() for _ in range(3)]
         self.training_data = []
 
     def train(self, pdtb, parses, bs_ratio=0.75):
         self.training_data = bootstrap_dataset(pdtb, parses, n_straps=3, ratio=bs_ratio)
         for p_i, p in enumerate(self.models):
-            p.train(*self.training_data[p_i])
+            p.fit(*self.training_data[p_i])
 
     def train_more(self, pdtbs, parsed_docs):
         for p_i, p in enumerate(self.models):
@@ -33,7 +33,7 @@ class TriDiscourseParser(object):
             for doc_id, rels in pdtbs[p_i].items():
                 strap_pdtb.extend(rels)
                 strap_parses[doc_id] = parsed_docs[doc_id]
-            p.train(strap_pdtb, strap_parses)
+            p.fit(strap_pdtb, strap_parses)
 
     def score(self, pdtb, parses):
         for p_i, p in enumerate(self.models):
