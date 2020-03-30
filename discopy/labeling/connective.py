@@ -118,23 +118,33 @@ def generate_pdtb_features(pdtb, parses):
 
 class ConnectiveClassifier:
     def __init__(self):
-        self.model = Pipeline([
-            ('vectorizer', DictVectorizer()),
-            ('variance', VarianceThreshold(threshold=0.0001)),
-            ('model',
-             SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
-                           class_weight='balanced', random_state=0))
-        ])
+        if os.path.exists(os.path.expanduser('~/.discopy/connective_clf.p')):
+            self.load(os.path.expanduser('~/.discopy/connective_clf.p'))
+            self.pretrained = True
+        else:
+            self.pretrained = False
+            self.model = Pipeline([
+                ('vectorizer', DictVectorizer()),
+                ('variance', VarianceThreshold(threshold=0.0001)),
+                ('model',
+                 SGDClassifier(loss='log', penalty='l2', average=32, tol=1e-3, max_iter=100, n_jobs=-1,
+                               class_weight='balanced', random_state=0))
+            ])
 
     def load(self, path):
         self.model = pickle.load(open(os.path.join(path, 'connective_clf.p'), 'rb'))
 
     def save(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)
         pickle.dump(self.model, open(os.path.join(path, 'connective_clf.p'), 'wb'))
 
     def fit(self, pdtb, parses):
-        X, y = generate_pdtb_features(pdtb, parses)
-        self.model.fit(X, y)
+        if not self.pretrained:
+            X, y = generate_pdtb_features(pdtb, parses)
+            self.model.fit(X, y)
+        else:
+            logger.info("Use pretrained Connective Classifier")
 
     def score_on_features(self, X, y):
         y_pred = self.model.predict_proba(X)
@@ -176,3 +186,4 @@ if __name__ == "__main__":
     clf.score(pdtb_train, parses_train)
     logger.info('Evaluation on TEST')
     clf.score(pdtb_val, parses_val)
+    clf.save(os.path.expanduser('~/.discopy/connective_clf.p'))
