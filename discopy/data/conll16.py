@@ -1,12 +1,12 @@
 import logging
 import multiprocessing
 import os
-import ujson as json
 
 import benepar
 import joblib
 import nltk
 import spacy
+import ujson as json
 from tqdm import tqdm
 
 from discopy.conn_head_mapper import ConnHeadMapper
@@ -30,9 +30,11 @@ def load_parse_trees(doc_id, parse_strings):
     return doc_id, results
 
 
-def get_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True):
+def get_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True, types=('Explicit', 'Implicit')):
     pdtb = [json.loads(s) for s in open('{}/{}/relations.json'.format(data_path, mode), 'r').readlines()]
     parses = json.loads(open('{}/{}/parses.json'.format(data_path, mode), 'r').read())
+    if types:
+        pdtb = [r for r in pdtb if r['Type'] in types]
     if load_trees:
         with multiprocessing.Pool(4) as pool:
             args = [(doc_id, [s['parsetree'] for s in doc['sentences']])
@@ -49,7 +51,6 @@ def get_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True
             r['Connective']['RawText'] = head
             r['Connective']['CharacterSpanList'] = [
                 [r['Connective']['TokenList'][0][0], r['Connective']['TokenList'][-1][1]]]
-
     return parses, pdtb
 
 
@@ -61,6 +62,13 @@ def get_conll_bert_dataset(data_path, mode, load_trees=False, connective_mapping
         for sent, sent_bert in zip(parses[doc_id]['sentences'], bert_embeddings[doc_id]):
             sent['bert'] = sent_bert
     return parses, pdtb
+
+
+def load_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True, use_bert=False):
+    if use_bert:
+        return get_conll_bert_dataset(data_path, mode, load_trees, connective_mapping)
+    else:
+        return get_conll_dataset(data_path, mode, load_trees, connective_mapping)
 
 
 def parse_sentence(nlp, ptree, sentence):
@@ -84,18 +92,6 @@ def parse_sentence(nlp, ptree, sentence):
             }) for w_doc, w_orig in zip(doc, sentence['words'])
         ]
     }
-    # return {
-    #     'Sentence': sent.string.strip(),
-    #     'Length': len(sent.string),
-    #     'Tokens': [t.text for t in sent],
-    #     'POS': [t.tag_ for t in sent],
-    #     'Offset': [t.idx - sent[0].idx for t in sent],
-    #     'Dep': [(t.dep_, (t.head.text, t.head.i), (t.text, t.i)) for t in sent],
-    #     'SentenceOffset': offset + sent[0].idx,
-    #     'Parse': sent._.parse_string,
-    #     'NER_iob': [t.ent_iob_ for t in sent],
-    #     'NER_type': [t.ent_type_ for t in sent],
-    # }
 
 
 def get_conll_dataset_extended(data_path, mode, connective_mapping=True):
