@@ -9,8 +9,7 @@ from tensorflow.python.keras.regularizers import l2
 logger = logging.getLogger('discopy')
 
 from tensorflow.keras import Input, Model
-from tensorflow.keras.layers import Bidirectional, Dense, Dropout, SpatialDropout1D
-
+from tensorflow.keras.layers import Bidirectional, Dense, Dropout, SpatialDropout1D, Flatten
 
 import tensorflow as tf
 
@@ -28,7 +27,7 @@ def get_class_weights(y, smooth_factor=0.0):
         for k in counter.keys():
             counter[k] += p
     majority = max(counter.values())
-    return {cls: float(majority/count) for cls, count in counter.items()}
+    return {cls: float(majority / count) for cls, count in counter.items()}
 
 
 def get_balanced_class_weights(y):
@@ -36,9 +35,9 @@ def get_balanced_class_weights(y):
     return get_class_weights(y, 0)
 
 
-def class_weighted_loss(class_weights):
+def class_weighted_loss(class_weights, nb_classes=4):
     def loss(onehot_labels, logits):
-        c_weights = np.array([class_weights[i] for i in range(4)])
+        c_weights = np.array([class_weights[i] for i in range(nb_classes)])
         unweighted_losses = tf.compat.v1.nn.softmax_cross_entropy_with_logits_v2(labels=[onehot_labels],
                                                                                  logits=[logits])
         weights = tf.reduce_sum(tf.multiply(onehot_labels, c_weights), axis=-1)
@@ -52,6 +51,8 @@ def class_weighted_loss(class_weights):
 class BiLSTMx:
 
     def __init__(self, embd_layer, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, nb_classes):
+        nb_labels, nb_senses = nb_classes
+
         x = Input(shape=(max_seq_len,), name='window-input')
         y = embd_layer(x)
         y = SpatialDropout1D(0.2)(y)
@@ -59,19 +60,23 @@ class BiLSTMx:
         if not no_rnn:
             y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
             y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
-        if not no_dense:
-            y = Dense(hidden_dim, activation='relu', name='hidden-dense', kernel_regularizer=l2(0.001))(y)
+        # if not no_dense:
+        #     y = Dense(hidden_dim, activation='relu', name='hidden-dense', kernel_regularizer=l2(0.001))(y)
         y = Dropout(0.2)(y)
-        y = Dense(nb_classes, activation='softmax', name='args')(y)
+        y1 = Dense(nb_labels, activation='softmax', name='args')(y)
+
+        y2 = Flatten()(y)
+        y2 = Dense(nb_senses, activation='softmax', name='senses')(y2)
 
         self.x = x
-        self.y = y
+        self.y1 = y1
+        self.y2 = y2
 
-        self.model = Model(self.x, self.y)
+        self.model = Model(self.x, [self.y1, self.y2])
 
     def compile(self, class_weights):
         optimizer = Adam(lr=0.001, amsgrad=True)
-        self.model.compile(loss=class_weighted_loss(class_weights), optimizer=optimizer,
+        self.model.compile(loss=[class_weighted_loss(class_weights), 'categorical_crossentropy'], optimizer=optimizer,
                            metrics=['accuracy'])
 
     def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size, callbacks):
@@ -93,21 +98,28 @@ class BiLSTMx:
 class BertBiLSTMx:
 
     def __init__(self, embd_dim, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, nb_classes):
+        nb_labels, nb_senses = nb_classes
+
         x = y = Input(shape=(max_seq_len, embd_dim), name='window-input')
         # y = SpatialDropout1D(0.2)(x)
         y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
         y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
         y = Dropout(0.2)(y)
-        y = Dense(nb_classes, activation='softmax', name='args')(y)
+        y1 = Dense(nb_labels, activation='softmax', name='args')(y)
+
+        # y2 =
+        y2 = Flatten()(y)
+        y2 = Dense(nb_senses, activation='softmax', name='senses')(y2)
 
         self.x = x
-        self.y = y
+        self.y1 = y1
+        self.y2 = y2
 
-        self.model = Model(self.x, self.y)
+        self.model = Model(self.x, [self.y1, self.y2])
 
     def compile(self, class_weights):
         optimizer = Adam(lr=0.001, amsgrad=True)
-        self.model.compile(loss=class_weighted_loss(class_weights), optimizer=optimizer,
+        self.model.compile(loss=[class_weighted_loss(class_weights), 'categorical_crossentropy'], optimizer=optimizer,
                            metrics=['accuracy'])
 
     def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size, callbacks):

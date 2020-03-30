@@ -8,8 +8,8 @@ import numpy as np
 
 from discopy.data.conll16 import get_conll_dataset
 from discopy.labeling.connective import ConnectiveClassifier
-from discopy.labeling.neural.arg_extract import ArgumentExtractBiLSTM, BiLSTMConnectiveArgumentExtractor, \
-    BertConnectiveArgumentExtractor, BertArgumentExtractor
+from discopy.labeling.neural.arg_extract_mt import BiLSTMConnectiveArgumentExtractor, ArgumentExtractBiLSTM
+from discopy.labeling.neural.arg_extract_mt import BertConnectiveArgumentExtractor, BertArgumentExtractor
 from discopy.parsers.parser import AbstractBaseParser
 from discopy.parsers.utils import get_token_list2, get_raw_tokens2
 from discopy.utils import init_logger, ParsedRelation
@@ -160,7 +160,6 @@ class NeuralExplicitArgumentExtractor(AbstractBiLSTMDiscourseParser):
         else:
             arguments_pred = self.arg_labeler.extract_arguments([w[0][0] for w in doc_words],
                                                                 strides=1, max_distance=0.5)
-
         for r in arguments_pred:
             if not r.conn:
                 continue
