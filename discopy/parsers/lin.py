@@ -57,11 +57,19 @@ class LinParser(AbstractBaseParser):
     def load(self, path):
         if not os.path.exists(path):
             raise FileNotFoundError('Path not found')
-        self.connective_clf.load(path)
-        self.arg_pos_clf.load(path)
-        self.arg_extract_clf.load(path)
-        self.explicit_clf.load(path)
-        self.non_explicit_clf.load(path)
+        if os.path.exists(os.path.join(path, 'parser.joblib')):
+            parser = joblib.load(os.path.join(path, 'parser.joblib'))
+            self.connective_clf = parser.connective_clf
+            self.arg_pos_clf = parser.arg_pos_clf
+            self.arg_extract_clf = parser.arg_extract_clf
+            self.explicit_clf = parser.explicit_clf
+            self.non_explicit_clf = parser.non_explicit_clf
+        else:
+            self.connective_clf.load(path)
+            self.arg_pos_clf.load(path)
+            self.arg_extract_clf.load(path)
+            self.explicit_clf.load(path)
+            self.non_explicit_clf.load(path)
 
     @staticmethod
     def from_path(path):

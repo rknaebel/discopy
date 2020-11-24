@@ -5,6 +5,7 @@ import click
 import nltk
 from discopy.parsers import get_parser
 
+# TODO run on gpu raises error: supar sequence length datatype problem
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import spacy
 from discopy.utils import init_logger
