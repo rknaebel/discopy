@@ -76,7 +76,7 @@ class LinParser(AbstractBaseParser):
         for sent_id, sent in enumerate(doc['sentences']):
             sent_len = len(sent['words'])
             ptree = sent['parsetree']
-            if not ptree.leaves():
+            if ptree is None or not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 token_id += sent_len
                 sent_offset += sent_len
@@ -109,7 +109,7 @@ class LinParser(AbstractBaseParser):
         for relation in relations:
             sent_id = relation.Connective.get_sentence_ids()[0]
             ptree = doc['sentences'][sent_id]['parsetree']
-            if not ptree.leaves():
+            if ptree is None or not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 continue
 
@@ -145,7 +145,7 @@ class LinParser(AbstractBaseParser):
         for relation in relations:
             sent_id = relation.Connective.get_sentence_ids()[0]
             ptree = doc['sentences'][sent_id]['parsetree']
-            if not ptree.leaves():
+            if ptree is None or not ptree.leaves():
                 logger.warning('Failed on empty tree')
                 continue
             explicit, explicit_c = self.explicit_clf.get_sense(relation.to_dict(), ptree)
@@ -195,7 +195,7 @@ class LinParser(AbstractBaseParser):
             dtree = sent['dependencies']
             dtree_prev = doc['sentences'][sent_id - 1]['dependencies']
 
-            if not ptree.leaves() or not ptree_prev.leaves():
+            if ptree is None or not ptree.leaves() or ptree_prev is None or not ptree_prev.leaves():
                 continue
 
             arg1_idxs = [t[2] for t in relation.Arg1.TokenList]

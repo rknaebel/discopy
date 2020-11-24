@@ -2,6 +2,8 @@ import argparse
 import os
 from pprint import pprint
 
+import nltk
+
 from discopy.parsers import get_parser
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -18,10 +20,6 @@ argument_parser.add_argument("--out", help="",
                              default='')
 argument_parser.add_argument("--src", help="",
                              default='')
-# argument_parser.add_argument("--parser", help="",
-#                              default='lin')
-# argument_parser.add_argument("--threshold", help="",
-#                              default=0.9, type=float)
 args = argument_parser.parse_args()
 
 nlp = spacy.load('en')
@@ -68,6 +66,17 @@ def parse_text(text):
                 'sentOffset': sent[0].idx
             })
             offset += len(sent.string)
+    for sent_id, sent in enumerate(sentences):
+        try:
+            ptree = nltk.Tree.fromstring(sent['parsetree'])
+            if not ptree.leaves():
+                logger.warning('Failed on empty tree')
+                sent['parsetree'] = None
+            else:
+                sent['parsetree'] = nltk.ParentedTree.convert(ptree)
+        except ValueError:
+            logger.warning('Failed to parse sent {}'.format(sent_id))
+            sent['parsetree'] = None
     return {
         'text': text,
         'sentences': sentences

@@ -157,11 +157,12 @@ class AbstractArgumentExtractor:
                 np.unique(['.'.join(sense.split('.')[:sense_level]) for r in pdtb for sense in r['Sense']])
             ))
             self.init_model()
-        data_file_path = '/cache/{}_{}_{}_{}.hdf5'.format(
+        data_file_path = '/cache/{}_{}_{}_{}_{}.hdf5'.format(
             'idx' if self.use_indices else 'bert',
             self.window_length,
             self.explicits_only,
-            self.positives_only
+            self.positives_only,
+            sense_level
         )
         if not os.path.exists(data_file_path):
             logger.warning('File not found, generate data: ' + data_file_path)

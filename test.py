@@ -51,7 +51,7 @@ if __name__ == '__main__':
     parser = get_parser(args.parser)
     parser_path = args.dir
 
-    if args.fit:
+    if args.train:
         logger.info('Train end-to-end Parser...')
         parser.fit(pdtb_train, parses_train, pdtb_val, parses_val)
         parser.save(os.path.join(args.dir))
