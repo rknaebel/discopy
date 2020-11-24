@@ -6,12 +6,12 @@ The current implementation is following the Conll2016 implementation guidelines 
 
 ## Setup
 You can easily install *discopy* by using pip:
-```
+```shell script
 pip install git+https://github.com/rknaebel/discopy
 ```
 or you just clone the repository.
 The you can either install discopy through pip
-```
+```shell script
 pip install -e path/to/discopy
 ```
 or you execute `main.py` directly within the repository directory.
@@ -21,43 +21,16 @@ or you execute `main.py` directly within the repository directory.
 These example commands are executed from within the repository folder.
 
 ### Training
-```
-python3 main.py --mode train --dir tmp --pdtb path/train/relations.json --parses path/train/parses.json
-```
-For training all components two epochs each:
-```
-python3 main.py --mode train --dir tmp --pdtb path/train/relations.json --parses path/train/parses.json --epochs 2
+```shell script
+python train.py --parser lin --dir models/lin --conll ../conll2016
 ```
 
-### Execution
-```
-python3 main.py --mode run --dir tmp --parses path/dev/parses.json --out output.json
+### Prediction
+```shell script
+python parse.py -i path/to/some/textfile -m models/lin
 ```
 
 ### Evaluation
+```shell script
+python test.py --parser lin --dir models/lin --conll ../conll2016
 ```
-python3 main.py --mode eval --pdtb path/dev/relations.json --out output.json
-```
-
-
-### Semi supervised Tri Training
-```
-python3 self_baseline.py --dir exp_tri --conll /data/discourse/conll2016/ --train --gpu 0
-```
-
-## Components
-
-
-### Connective
-
-
-### Argument Position
-
-
-### Argument Extraction
-
-
-### Explicit Sense
-
-
-### Implicit Sense

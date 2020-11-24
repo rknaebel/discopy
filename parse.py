@@ -1,24 +1,14 @@
-import argparse
+import json
 import os
-from pprint import pprint
 
+import click
 import nltk
 from discopy.parsers import get_parser
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
-import sys
 import spacy
 from discopy.utils import init_logger
 import supar
-
-argument_parser = argparse.ArgumentParser()
-argument_parser.add_argument("--dir", help="",
-                             default='tmp')
-argument_parser.add_argument("--out", help="",
-                             default='')
-argument_parser.add_argument("--src", help="",
-                             default='')
-args = argument_parser.parse_args()
 
 logger = init_logger()
 
@@ -32,7 +22,6 @@ def parse_text(text):
     for doc in nlp.pipe(text):
         sents = list(doc.sents)
         for sent in sents:
-            # words
             words = [
                 [t.text, {
                     'CharacterOffsetBegin': t.idx + offset,
@@ -43,8 +32,6 @@ def parse_text(text):
                 }]
                 for t in sent
             ]
-
-            # dependencies
             d_map = {
                 'compound': 'nn'
             }
@@ -72,23 +59,27 @@ def parse_text(text):
     }
 
 
-def main():
+def ptree_to_str(ptree):
+    if ptree is not None:
+        ptree = ptree._pformat_flat('', '()', False)
+    return ptree
+
+
+@click.command()
+@click.option('-i', '--src', default='-', type=click.File('r'))
+@click.option('-o', '--tgt', default='-', type=click.File('w'))
+@click.option('-m', '--model-path', type=str)
+def main(src, tgt, model_path):
     logger.info('Init Parser...')
     parser = get_parser('lin')
-
     logger.info('Load pre-trained Parser...')
-    parser.load(args.dir)
-
-    if args.src:
-        dfile = open(args.src, 'r').read()
-    else:
-        dfile = sys.stdin.read()
-
-    parsed_text = parse_text(dfile)
+    parser.load(model_path)
+    parsed_text = parse_text(src.read())
     parsed_relations = parser.parse_doc(parsed_text)
-
     parsed_text['discourse'] = parsed_relations
-    pprint(parsed_text)
+    for sent in parsed_text['sentences']:
+        sent['parsetree'] = ptree_to_str(sent['parsetree'])
+    tgt.write(json.dumps(parsed_text))
 
 
 if __name__ == '__main__':
