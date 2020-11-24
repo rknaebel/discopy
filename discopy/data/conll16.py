@@ -2,10 +2,8 @@ import logging
 import multiprocessing
 import os
 
-import benepar
 import joblib
 import nltk
-import spacy
 import ujson as json
 from tqdm import tqdm
 
@@ -54,9 +52,10 @@ def get_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True
     return parses, pdtb
 
 
-def get_conll_bert_dataset(data_path, mode, load_trees=False, connective_mapping=True):
-    parses, pdtb = get_conll_dataset(data_path, mode, load_trees, connective_mapping)
-    bert_path = os.path.join(data_path, mode, 'bert.joblib')
+def get_conll_bert_dataset(data_path, mode, load_trees=False, connective_mapping=True, use_bert='bert',
+                           types=('Explicit', 'Implicit')):
+    parses, pdtb = get_conll_dataset(data_path, mode, load_trees, connective_mapping, types)
+    bert_path = os.path.join(data_path, mode, '{}.joblib'.format(use_bert))
     bert_embeddings = joblib.load(bert_path)
     for doc_id in parses.keys():
         for sent, sent_bert in zip(parses[doc_id]['sentences'], bert_embeddings[doc_id]):
@@ -64,11 +63,12 @@ def get_conll_bert_dataset(data_path, mode, load_trees=False, connective_mapping
     return parses, pdtb
 
 
-def load_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True, use_bert=False):
+def load_conll_dataset(data_path, mode, load_trees=False, connective_mapping=True, use_bert="",
+                       types=('Explicit', 'Implicit')):
     if use_bert:
-        return get_conll_bert_dataset(data_path, mode, load_trees, connective_mapping)
+        return get_conll_bert_dataset(data_path, mode, load_trees, connective_mapping, use_bert=use_bert, types=types)
     else:
-        return get_conll_dataset(data_path, mode, load_trees, connective_mapping)
+        return get_conll_dataset(data_path, mode, load_trees, connective_mapping, types)
 
 
 def parse_sentence(nlp, ptree, sentence):
@@ -101,6 +101,8 @@ def get_conll_dataset_extended(data_path, mode, connective_mapping=True):
     if os.path.exists(parses_path):
         parses = json.load(open(parses_path, 'r'))
     else:
+        import spacy
+        import benepar
         print("load spacy")
         nlp = spacy.load('en')
         nlp.tokenizer = nlp.tokenizer.tokens_from_list
