@@ -3,15 +3,13 @@ import os
 from pprint import pprint
 
 import nltk
-
 from discopy.parsers import get_parser
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import sys
-import benepar
 import spacy
-from benepar.spacy_plugin import BeneparComponent
 from discopy.utils import init_logger
+import supar
 
 argument_parser = argparse.ArgumentParser()
 argument_parser.add_argument("--dir", help="",
@@ -22,15 +20,12 @@ argument_parser.add_argument("--src", help="",
                              default='')
 args = argument_parser.parse_args()
 
-nlp = spacy.load('en')
-
-benepar.download('benepar_en2')
-nlp.add_pipe(BeneparComponent("benepar_en2"))
-
 logger = init_logger()
 
 
 def parse_text(text):
+    nlp = spacy.load('en')
+    con_parser = supar.Parser.load('crf-con-en')
     sentences = []
     offset = 0
     text = [line.strip() for line in text.splitlines(keepends=True) if line.strip() and len(line.split(' ')) > 1]
@@ -53,10 +48,15 @@ def parse_text(text):
             d_map = {
                 'compound': 'nn'
             }
-
+            inputs = [(w[0], w[1]['PartOfSpeech']) for w in words]
+            try:
+                parses = con_parser.predict([inputs], prob=False, verbose=False)
+                parsetree = nltk.ParentedTree.convert(parses.trees[0])
+            except:
+                parsetree = None
             sentences.append({
                 'words': words,
-                'parsetree': sent._.parse_string,
+                'parsetree': parsetree,
                 'dependencies': [(
                     d_map.get(t.dep_, t.dep_),
                     "{}-{}".format(t.head.text, t.head.i + 1),
@@ -66,17 +66,6 @@ def parse_text(text):
                 'sentOffset': sent[0].idx
             })
             offset += len(sent.string)
-    for sent_id, sent in enumerate(sentences):
-        try:
-            ptree = nltk.Tree.fromstring(sent['parsetree'])
-            if not ptree.leaves():
-                logger.warning('Failed on empty tree')
-                sent['parsetree'] = None
-            else:
-                sent['parsetree'] = nltk.ParentedTree.convert(ptree)
-        except ValueError:
-            logger.warning('Failed to parse sent {}'.format(sent_id))
-            sent['parsetree'] = None
     return {
         'text': text,
         'sentences': sentences
