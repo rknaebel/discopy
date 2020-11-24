@@ -1,18 +1,15 @@
 import os
 
+import click
 from tqdm import tqdm
 
 from discopy.parsers import get_parser
-from discopy.semi_utils import get_arguments
 
-args = get_arguments()
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+os.environ['CUDA_VISIBLE_DEVICES'] = os.environ.get('CUDA_VISIBLE_DEVICES', '')
 
 from discopy.data.conll16 import get_conll_dataset
 from discopy.utils import init_logger
 import discopy.evaluate.exact
-
-os.makedirs(args.dir, exist_ok=True)
 
 logger = init_logger()
 
@@ -41,33 +38,27 @@ def evaluate_parser(pdtb_gold, pdtb_pred, threshold=0.7):
     return discopy.evaluate.exact.evaluate_all(gold_relations, pred_relations, threshold=threshold)
 
 
-if __name__ == '__main__':
-    parses_train, pdtb_train = get_conll_dataset(args.conll, 'en.train', load_trees=True, connective_mapping=True)
-    parses_val, pdtb_val = get_conll_dataset(args.conll, 'en.dev', load_trees=True, connective_mapping=True)
-    parses_test, pdtb_test = get_conll_dataset(args.conll, 'en.test', load_trees=True, connective_mapping=True)
-    parses_blind, pdtb_blind = get_conll_dataset(args.conll, 'en.blind-test', load_trees=True, connective_mapping=True)
-
+@click.command()
+@click.argument('parser', type=str)
+@click.argument('model-path', type=str)
+@click.argument('conll-path', type=str)
+@click.option('-t', '--threshold', default=0.9, type=str)
+def main(parser, model_path, conll_path, threshold):
+    parses_test, pdtb_test = get_conll_dataset(conll_path, 'en.test', load_trees=True, connective_mapping=True)
+    parses_blind, pdtb_blind = get_conll_dataset(conll_path, 'en.blind-test', load_trees=True, connective_mapping=True)
     logger.info('Init Parser...')
-    parser = get_parser(args.parser)
-    parser_path = args.dir
-
-    if args.train:
-        logger.info('Train end-to-end Parser...')
-        parser.fit(pdtb_train, parses_train, pdtb_val, parses_val)
-        parser.save(os.path.join(args.dir))
-    elif os.path.exists(args.dir):
-        logger.info('Load pre-trained Parser...')
-        parser.load(args.dir)
-    else:
-        raise ValueError('Training and Loading not clear')
-
+    parser = get_parser(parser)
+    logger.info('Load pre-trained Parser...')
+    parser.load(model_path)
     logger.info('component evaluation (test)')
     parser.score(pdtb_test, parses_test)
-
     logger.info('extract discourse relations from test data')
     pdtb_pred = extract_discourse_relations(parser, parses_test)
-    evaluate_parser(pdtb_test, pdtb_pred, threshold=args.threshold)
-
+    evaluate_parser(pdtb_test, pdtb_pred, threshold=threshold)
     logger.info('extract discourse relations from BLIND data')
     pdtb_pred = extract_discourse_relations(parser, parses_blind)
-    evaluate_parser(pdtb_blind, pdtb_pred, threshold=args.threshold)
+    evaluate_parser(pdtb_blind, pdtb_pred, threshold=threshold)
+
+
+if __name__ == '__main__':
+    main()

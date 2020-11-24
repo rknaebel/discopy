@@ -22,15 +22,17 @@ These example commands are executed from within the repository folder.
 
 ### Training
 ```shell script
-python train.py --parser lin --dir models/lin --conll ../conll2016
+python cli/train.py lin path/to/model path/to/conll
+```
+Training data format is json, the folder contains subfolders `en.{train,dev,test}` 
+with files `rtelations.json` and `parses.json`.
+
+### Evaluation
+```shell script
+python cli/test.py lin path/to/model path/to/conll
 ```
 
 ### Prediction
 ```shell script
-python parse.py -i path/to/some/textfile -m models/lin
-```
-
-### Evaluation
-```shell script
-python test.py --parser lin --dir models/lin --conll ../conll2016
+python cli/parse.py -i path/to/some/textfile -m models/lin
 ```
