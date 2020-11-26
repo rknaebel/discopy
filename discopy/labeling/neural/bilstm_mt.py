@@ -57,15 +57,15 @@ class BiLSTMx:
         y = embd_layer(x)
         y = SpatialDropout1D(0.2)(y)
         y = Dense(hidden_dim, activation='relu')(y)
-        if not no_rnn:
-            y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
-            y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
+        y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
+        y1 = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
         # if not no_dense:
         #     y = Dense(hidden_dim, activation='relu', name='hidden-dense', kernel_regularizer=l2(0.001))(y)
-        y = Dropout(0.2)(y)
-        y1 = Dense(nb_labels, activation='softmax', name='args')(y)
+        y1 = Dropout(0.2)(y1)
+        y1 = Dense(nb_labels, activation='softmax', name='args')(y1)
 
         y2 = Flatten()(y)
+        y2 = Dropout(0.33)(y2)
         y2 = Dense(nb_senses, activation='softmax', name='senses')(y2)
 
         self.x = x
@@ -101,14 +101,15 @@ class BertBiLSTMx:
         nb_labels, nb_senses = nb_classes
 
         x = y = Input(shape=(max_seq_len, embd_dim), name='window-input')
-        # y = SpatialDropout1D(0.2)(x)
-        y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
-        y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
-        y = Dropout(0.2)(y)
-        y1 = Dense(nb_labels, activation='softmax', name='args')(y)
+        y = Bidirectional(tf.compat.v1.keras.layers.CuDNNLSTM(rnn_dim, return_sequences=True), name='hidden-rnn1')(y)
+        y = Bidirectional(tf.compat.v1.keras.layers.CuDNNLSTM(rnn_dim, return_sequences=True), name='hidden-rnn2')(y)
+        y1 = Dropout(0.2)(y)
+        y1 = Dense(hidden_dim, activation='relu', name='hidden-args')(y1)
+        y1 = Dropout(0.2)(y1)
+        y1 = Dense(nb_classes, activation='softmax', name='args')(y1)
 
-        # y2 =
         y2 = Flatten()(y)
+        y2 = Dropout(0.2)(y2)
         y2 = Dense(nb_senses, activation='softmax', name='senses')(y2)
 
         self.x = x
@@ -118,8 +119,8 @@ class BertBiLSTMx:
         self.model = Model(self.x, [self.y1, self.y2])
 
     def compile(self, class_weights):
-        optimizer = Adam(lr=0.001, amsgrad=True)
-        self.model.compile(loss=[class_weighted_loss(class_weights), 'categorical_crossentropy'], optimizer=optimizer,
+        # optimizer = Adam(lr=0.001, amsgrad=True)
+        self.model.compile(loss=[class_weighted_loss(class_weights), 'categorical_crossentropy'], optimizer='nadam',
                            metrics=['accuracy'])
 
     def fit(self, x_train, y_train, x_val, y_val, epochs, batch_size, callbacks):

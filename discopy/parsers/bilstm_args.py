@@ -127,11 +127,11 @@ class NeuralExplicitArgumentExtractor(AbstractBiLSTMDiscourseParser):
                                                      no_crf=no_crf,
                                                      explicits_only=True)
 
-    def fit(self, pdtb, parses, pdtb_val, parses_val, path=None, epochs=10):
+    def fit(self, pdtb, parses, pdtb_val, parses_val, epochs=10, save_path=''):
         logger.info('Train Argument Extractor...')
-        if path and not os.path.exists(path):
-            os.makedirs(path)
-        self.arg_labeler.fit(pdtb, parses, pdtb_val, parses_val, save_path=path, epochs=epochs)
+        if save_path and not os.path.exists(save_path):
+            os.makedirs(save_path)
+        self.arg_labeler.fit(pdtb, parses, pdtb_val, parses_val, save_path=save_path, epochs=epochs)
 
     def fit_noisy(self, pdtb, parses, pdtb_val, parses_val, pdtb_noisy, parses_noisy, path='', epochs=10):
         logger.info('Train Argument Extractor...')
@@ -207,11 +207,11 @@ class NeuralConnectiveArgumentExtractor(AbstractBiLSTMDiscourseParser):
                                                                  no_rnn=False,
                                                                  no_dense=False, no_crf=no_crf)
 
-    def fit(self, pdtb, parses, pdtb_val, parses_val, epochs=25):
+    def fit(self, pdtb, parses, pdtb_val, parses_val, epochs=25, save_path=''):
         logger.info('Train Connective Classifier...')
         self.connective_clf.fit(pdtb, parses)
         logger.info('Train Argument Extractor...')
-        self.arg_labeler.fit(pdtb, parses, pdtb_val, parses_val, epochs=epochs)
+        self.arg_labeler.fit(pdtb, parses, pdtb_val, parses_val, epochs=epochs, save_path=save_path)
 
     def score(self, pdtb, parses):
         self.connective_clf.score(pdtb, parses)

@@ -95,8 +95,10 @@ class BertBiLSTMx:
     def __init__(self, embd_dim, max_seq_len, hidden_dim, rnn_dim, no_rnn, no_dense, nb_classes):
         x = y = Input(shape=(max_seq_len, embd_dim), name='window-input')
         # y = SpatialDropout1D(0.2)(x)
-        y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn1'))(y)
-        y = Bidirectional(tf.keras.layers.GRU(rnn_dim, return_sequences=True, name='hidden-rnn2'))(y)
+        y = Bidirectional(tf.compat.v1.keras.layers.CuDNNLSTM(rnn_dim, return_sequences=True), name='hidden-rnn1')(y)
+        y = Bidirectional(tf.compat.v1.keras.layers.CuDNNLSTM(rnn_dim, return_sequences=True), name='hidden-rnn2')(y)
+        y = Dropout(0.2)(y)
+        y = Dense(hidden_dim, activation='relu', name='hidden-args')(y)
         y = Dropout(0.2)(y)
         y = Dense(nb_classes, activation='softmax', name='args')(y)
 

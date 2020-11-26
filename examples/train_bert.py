@@ -58,9 +58,9 @@ if __name__ == '__main__':
         parses_val, pdtb_val = load_conll_dataset(args.conll, 'en.dev', load_trees=load_trees,
                                                   connective_mapping=True, use_bert=args.bert)
         logger.info('Train end-to-end Parser...')
-        parser.fit(pdtb_train, parses_train, pdtb_val, parses_val, epochs=50)
+        parser.fit(pdtb_train, parses_train, pdtb_val, parses_val, epochs=50, save_path=args.dir)
         if args.dir:
-            parser.save(os.path.join(args.dir))
+            parser.save(args.dir)
     else:
         parser.load(os.path.join(args.dir))
     parses_test, pdtb_test = load_conll_dataset(args.conll, 'en.test', load_trees=load_trees,

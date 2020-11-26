@@ -1,9 +1,0 @@
-nltk
-numpy
-ujson
-joblib
-sklearn
-sklearn-crfsuite
-spacy
-tensorflow
-benepar
