@@ -10,7 +10,6 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score
 from sklearn.pipeline import Pipeline
 
-from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.data.conll16 import get_conll_dataset
 from discopy.features import get_connective_sentence_position, lca
 from discopy.utils import preprocess_relations, init_logger
@@ -22,10 +21,7 @@ lemmatizer = nltk.stem.WordNetLemmatizer()
 
 def get_features(relation, ptree):
     connective = relation['Connective']['RawText']
-    chm = ConnHeadMapper()
-    head, connective_head_index = chm.map_raw_connective(connective)
     leaf_index = [index[4] for index in relation['Connective']['TokenList']]
-    connective_head_index = [leaf_index[i] for i in connective_head_index]
 
     lca_loc = lca(ptree, leaf_index)
     conn_tag = ptree[lca_loc].label()
@@ -36,9 +32,9 @@ def get_features(relation, ptree):
         prev = ptree.leaves()[leaf_index[0] - 1][0]
         prev = lemmatizer.lemmatize(prev)
 
-    conn_pos_relative = get_connective_sentence_position(connective_head_index, ptree)
+    conn_pos_relative = get_connective_sentence_position(leaf_index, ptree)
 
-    feat = {'Connective': connective, 'connectiveHead': head,
+    feat = {'Connective': connective,
             'ConnectivePOS': conn_tag,
             'ConnectivePrev': prev, 'connectivePosition': conn_pos_relative}
     return feat
