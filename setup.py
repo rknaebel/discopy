@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(name='discopy-rknaebel',
-      version='0.1.0',
+      version='1.0.0',
       description='Shallow Discourse Parser',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -22,7 +22,6 @@ setup(name='discopy-rknaebel',
           'sklearn-crfsuite',
           'ujson',
           'spacy',
-          'benepar',
           'supar',
       ],
       zip_safe=False,
