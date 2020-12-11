@@ -77,12 +77,12 @@ class ExplicitSenseClassifier(Component):
     def save(self, path):
         pickle.dump(self.model, open(os.path.join(path, 'explicit_clf.p'), 'wb'))
 
-    def fit(self, docs):
-        X, y = generate_pdtb_features(docs)
-        self.model.fit(X, y)
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+        x, y = generate_pdtb_features(docs_train)
+        self.model.fit(x, y)
 
-    def score_on_features(self, X, y):
-        y_pred = self.model.predict_proba(X)
+    def score_on_features(self, x, y):
+        y_pred = self.model.predict_proba(x)
         y_pred_c = self.model.classes_[y_pred.argmax(axis=1)]
         logger.info("Evaluation: Sense(explicit)")
         logger.info("    Acc  : {:<06.4}".format(accuracy_score(y, y_pred_c)))
@@ -91,8 +91,8 @@ class ExplicitSenseClassifier(Component):
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred_c)))
 
     def score(self, docs):
-        X, y = generate_pdtb_features(docs)
-        self.score_on_features(X, y)
+        x, y = generate_pdtb_features(docs)
+        self.score_on_features(x, y)
 
     def get_sense(self, relation: Relation, ptree: nltk.ParentedTree):
         x = get_features(relation, ptree)

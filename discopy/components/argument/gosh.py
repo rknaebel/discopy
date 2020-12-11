@@ -124,8 +124,8 @@ class GoshArgumentExtractor(Component):
         pickle.dump(self.arg1_model, open(os.path.join(path, "{}.arg1.p".format(self.id)), 'wb'))
         pickle.dump(self.arg2_model, open(os.path.join(path, "{}.arg2.p".format(self.id)), 'wb'))
 
-    def fit(self, docs: List[Document]):
-        (x_arg1, y_arg1), (x_arg2, y_arg2) = generate_pdtb_features(docs, self.window_side_size)
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+        (x_arg1, y_arg1), (x_arg2, y_arg2) = generate_pdtb_features(docs_train, self.window_side_size)
         self.arg1_model.fit(x_arg1, y_arg1)
         self.arg2_model.fit(x_arg2, y_arg2)
 

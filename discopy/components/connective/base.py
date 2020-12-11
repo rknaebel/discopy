@@ -121,8 +121,8 @@ class ConnectiveClassifier(Component):
             os.makedirs(path)
         pickle.dump(self.model, open(os.path.join(path, 'connective_clf.p'), 'wb'))
 
-    def fit(self, docs):
-        x, y = generate_pdtb_features(docs)
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+        x, y = generate_pdtb_features(docs_train)
         self.model.fit(x, y)
 
     def score_on_features(self, x, y):
