@@ -11,7 +11,7 @@ class Component:
     def save(self, path: str):
         raise NotImplementedError()
 
-    def fit(self, docs: List[Document]):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         raise NotImplementedError()
 
     def score(self, docs: List[Document]):

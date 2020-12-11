@@ -89,9 +89,9 @@ class CRFArgumentExtractor(Component):
         pickle.dump(self.ss_model, open(os.path.join(path, "{}.ss.p".format(self.id)), 'wb'))
         pickle.dump(self.ps_model, open(os.path.join(path, "{}.ps.p".format(self.id)), 'wb'))
 
-    def fit(self, docs: List[Document]):
-        self.arg_pos_clf.fit(docs)
-        (x_ss, y_ss), (x_ps, y_ps) = generate_pdtb_features(docs)
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+        self.arg_pos_clf.fit(docs_train)
+        (x_ss, y_ss), (x_ps, y_ps) = generate_pdtb_features(docs_train)
         self.ss_model.fit(x_ss, y_ss)
         self.ps_model.fit(x_ps, y_ps)
 

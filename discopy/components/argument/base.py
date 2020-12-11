@@ -170,9 +170,9 @@ class ExplicitArgumentExtractor(Component):
         pickle.dump(self.ss_model, open(os.path.join(path, 'ss_extract_clf.p'), 'wb'))
         pickle.dump(self.ps_model, open(os.path.join(path, 'ps_extract_clf.p'), 'wb'))
 
-    def fit(self, docs: List[Document]):
-        self.arg_pos_clf.fit(docs)
-        (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(docs)
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+        self.arg_pos_clf.fit(docs_train)
+        (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(docs_train)
         self.ss_model.fit(X_ss, y_ss)
         self.ps_model.fit(X_ps, y_ps)
 
@@ -290,7 +290,7 @@ class ImplicitArgumentExtractor(Component):
     def save(self, path: str):
         pass
 
-    def fit(self, docs: List[Document]):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         pass
 
     def score(self, docs: List[Document]):
