@@ -11,9 +11,10 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support, coh
 from sklearn_crfsuite import CRF
 
 from discopy.components.component import Component
-from discopy.data.doc import Document, DepRel
+from discopy.data.doc import ParsedDocument
+from discopy.data.sentence import DepRel
 from discopy.data.relation import Relation
-from discopy.data.loaders.conll import load_conll_dataset
+from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.features import get_compressed_chain
 from discopy.utils import init_logger, encode_iob, decode_iob
 
@@ -58,7 +59,7 @@ def get_features(ptree: nltk.ParentedTree, dtree: List[DepRel], indices, sense, 
     return features_sentence
 
 
-def generate_pdtb_features(docs: List[Document], window_side_size=2):
+def generate_pdtb_features(docs: List[ParsedDocument], window_side_size=2):
     arg1_features = []
     arg2_features = []
 
@@ -124,7 +125,7 @@ class GoshArgumentExtractor(Component):
         pickle.dump(self.arg1_model, open(os.path.join(path, "{}.arg1.p".format(self.id)), 'wb'))
         pickle.dump(self.arg2_model, open(os.path.join(path, "{}.arg2.p".format(self.id)), 'wb'))
 
-    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+    def fit(self, docs_train: List[ParsedDocument], docs_val: List[ParsedDocument] = None):
         (x_arg1, y_arg1), (x_arg2, y_arg2) = generate_pdtb_features(docs_train, self.window_side_size)
         self.arg1_model.fit(x_arg1, y_arg1)
         self.arg2_model.fit(x_arg2, y_arg2)
@@ -152,11 +153,11 @@ class GoshArgumentExtractor(Component):
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y_arg2, y_pred)))
 
-    def score(self, docs: List[Document]):
+    def score(self, docs: List[ParsedDocument]):
         (x_arg1, y_arg1), (x_arg2, y_arg2) = generate_pdtb_features(docs, self.window_side_size)
         self.score_on_features(x_arg1, y_arg1, x_arg2, y_arg2)
 
-    def extract_arguments(self, doc: Document, relation: Relation):
+    def extract_arguments(self, doc: ParsedDocument, relation: Relation):
         conn = [t.local_idx for t in relation.conn.tokens]
         arg2_sentence_id = relation.arg2.get_sentence_idxs()[0]
         sent_features = []
@@ -204,7 +205,7 @@ class GoshArgumentExtractor(Component):
 
         return arg1, arg2, arg1_prob, arg2_prob
 
-    def parse(self, doc: Document, relations: List[Relation] = None):
+    def parse(self, doc: ParsedDocument, relations: List[Relation] = None, **kwargs):
         if relations is None:
             raise ValueError('Component needs connectives already classified.')
         for relation in filter(lambda r: r.type == "Explicit", relations):
@@ -223,8 +224,8 @@ class GoshArgumentExtractor(Component):
 @click.argument('conll-path')
 def main(conll_path):
     logger = init_logger()
-    docs_train = load_conll_dataset(os.path.join(conll_path, 'en.train'))
-    docs_val = load_conll_dataset(os.path.join(conll_path, 'en.dev'))
+    docs_train = load_parsed_conll_dataset(os.path.join(conll_path, 'en.train'))
+    docs_val = load_parsed_conll_dataset(os.path.join(conll_path, 'en.dev'))
 
     clf = GoshArgumentExtractor()
     logger.info('Train Gosh model')

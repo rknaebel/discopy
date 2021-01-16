@@ -12,9 +12,10 @@ from sklearn.metrics import cohen_kappa_score, precision_recall_fscore_support, 
 from sklearn.pipeline import Pipeline
 
 from discopy.components.component import Component
-from discopy.data.doc import Document, Sentence
+from discopy.data.doc import ParsedDocument
+from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.data.relation import Relation
-from discopy.data.loaders.conll import load_conll_dataset
+from discopy.data.sentence import Sentence
 from discopy.features import get_compressed_chain, get_pos_features, get_sibling_label
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives, \
     init_logger
@@ -85,7 +86,7 @@ def get_features(ptree: nltk.ParentedTree, conn_idxs):
     return feat
 
 
-def generate_pdtb_features(docs: List[Document]):
+def generate_pdtb_features(docs: List[ParsedDocument]):
     features = []
     for doc in docs:
         for sent_i, sentence in enumerate(doc.sentences):
@@ -121,7 +122,7 @@ class ConnectiveClassifier(Component):
             os.makedirs(path)
         pickle.dump(self.model, open(os.path.join(path, 'connective_clf.p'), 'wb'))
 
-    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+    def fit(self, docs_train: List[ParsedDocument], docs_val: List[ParsedDocument] = None):
         x, y = generate_pdtb_features(docs_train)
         self.model.fit(x, y)
 
@@ -138,7 +139,7 @@ class ConnectiveClassifier(Component):
         x, y = generate_pdtb_features(docs)
         self.score_on_features(x, y)
 
-    def parse(self, doc: Document, *args, **kwargs):
+    def parse(self, doc: ParsedDocument, relations=None, **kwargs):
         relations: List[Relation] = []
         for sent_id, sent in enumerate(doc.sentences):
             ptree = sent.get_ptree()
@@ -162,8 +163,8 @@ class ConnectiveClassifier(Component):
 @click.argument('conll-path')
 def main(conll_path):
     logger = init_logger()
-    docs_train = load_conll_dataset(os.path.join(conll_path, 'en.train'))
-    docs_val = load_conll_dataset(os.path.join(conll_path, 'en.dev'))
+    docs_train = load_parsed_conll_dataset(os.path.join(conll_path, 'en.train'))
+    docs_val = load_parsed_conll_dataset(os.path.join(conll_path, 'en.dev'))
 
     clf = ConnectiveClassifier()
     logger.info('Train model')
@@ -173,7 +174,7 @@ def main(conll_path):
     logger.info('Evaluation on TEST')
     clf.score(docs_val)
     logger.info('Parse one document')
-    print(clf.parse(docs_val[0], []))
+    print(clf.parse(docs_val[0], [], ))
 
 
 if __name__ == "__main__":

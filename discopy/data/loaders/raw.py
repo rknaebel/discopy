@@ -1,7 +1,8 @@
 from typing import List
 
 import spacy
-from discopy.data.doc import Document, Sentence
+from discopy.data.doc import ParsedDocument
+from discopy.data.sentence import ParsedSentence
 from discopy.data.token import Token
 from discopy.data.update import update_dataset_parses
 from discopy.utils import init_logger
@@ -9,7 +10,7 @@ from discopy.utils import init_logger
 logger = init_logger()
 
 
-def load_texts(texts: List[str], simple_tags=False) -> List[Document]:
+def load_texts(texts: List[str], simple_tags=False) -> List[ParsedDocument]:
     nlp = spacy.load('en')
     docs = []
     for raw_text in texts:
@@ -31,7 +32,7 @@ def load_texts(texts: List[str], simple_tags=False) -> List[Document]:
                 words.extend(sent_words)
                 offset += len(sent.string)
                 token_offset += len(sent_words)
-                sentences.append(Sentence(sent_words))
-        docs.append(Document(doc_id=hash(raw_text), sentences=sentences, relations=[]))
+                sentences.append(ParsedSentence(sent_words))
+        docs.append(ParsedDocument(doc_id=hash(raw_text), sentences=sentences, relations=[]))
     update_dataset_parses(docs)
     return docs
