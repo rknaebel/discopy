@@ -18,6 +18,9 @@ class Token:
     def __str__(self):
         return f"{self.idx}-{self.surface}:{self.tag}"
 
+    def __hash__(self):
+        return hash(str(self))
+
     __repr__ = __str__
 
     def to_json(self):
@@ -65,9 +68,16 @@ class TokenSpan:
     def overlap(self, other: 'TokenSpan') -> int:
         return sum(int(i == j) for i in self.tokens for j in other.tokens)
 
+    def add(self, token: Token):
+        self.tokens.append(token)
+
     def __or__(self, other):
-        tokens = sorted(self.tokens + other.tokens, key=lambda t: t.idx)
+        tokens = sorted(set(self.tokens) | set(other.tokens), key=lambda t: t.idx)
         # TODO consistency check!
+        return TokenSpan(tokens)
+
+    def __and__(self, other):
+        tokens = sorted(set(self.tokens) & set(other.tokens), key=lambda t: t.idx)
         return TokenSpan(tokens)
 
     def __len__(self):

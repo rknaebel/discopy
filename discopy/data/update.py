@@ -1,7 +1,8 @@
 import os
 from typing import List
 
-from discopy.data.doc import DepRel, Document, Sentence
+from discopy.data.doc import ParsedDocument
+from discopy.data.sentence import ParsedSentence, DepRel
 
 
 def get_constituent_parse(constituent_parser, inputs):
@@ -33,7 +34,8 @@ def get_dependency_parse(dependency_parser, inputs, words):
     return dependencies
 
 
-def update_dataset_parses(docs: List[Document], constituent_parser='crf-con-en', dependency_parser='biaffine-dep-en'):
+def update_dataset_parses(docs: List[ParsedDocument], constituent_parser='crf-con-en',
+                          dependency_parser='biaffine-dep-en'):
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
     import supar
     cparser = supar.Parser.load(constituent_parser) if constituent_parser else None
@@ -43,7 +45,7 @@ def update_dataset_parses(docs: List[Document], constituent_parser='crf-con-en',
             inputs = [(t.surface, t.tag) for t in sent.tokens]
             parsetree = get_constituent_parse(cparser, inputs) if cparser else None
             dependencies = get_dependency_parse(dparser, inputs, sent.tokens) if dparser else None
-            doc.sentences[sent_i] = Sentence(
+            doc.sentences[sent_i] = ParsedSentence(
                 tokens=sent.tokens,
                 dependencies=dependencies if dependency_parser else sent.dependencies,
                 parsetree=parsetree if constituent_parser else sent.parsetree)

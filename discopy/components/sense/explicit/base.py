@@ -14,9 +14,9 @@ from sklearn.pipeline import Pipeline
 
 from discopy.components.component import Component
 from discopy.data.conll16 import get_conll_dataset
-from discopy.data.doc import Document
+from discopy.data.doc import ParsedDocument
 from discopy.data.relation import Relation
-from discopy.data.loaders.conll import load_conll_dataset
+from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.features import get_connective_sentence_position, lca
 from discopy.utils import preprocess_relations, init_logger
 
@@ -46,7 +46,7 @@ def get_features(relation: Relation, ptree: nltk.ParentedTree):
     return feat
 
 
-def generate_pdtb_features(docs: List[Document]):
+def generate_pdtb_features(docs: List[ParsedDocument]):
     features = []
     # pdtb = preprocess_relations(list(filter(lambda i: i['Type'] == 'Explicit', pdtb)), filters=filters)
     for doc in docs:
@@ -77,7 +77,7 @@ class ExplicitSenseClassifier(Component):
     def save(self, path):
         pickle.dump(self.model, open(os.path.join(path, 'explicit_clf.p'), 'wb'))
 
-    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
+    def fit(self, docs_train: List[ParsedDocument], docs_val: List[ParsedDocument] = None):
         x, y = generate_pdtb_features(docs_train)
         self.model.fit(x, y)
 
@@ -99,7 +99,7 @@ class ExplicitSenseClassifier(Component):
         probs = self.model.predict_proba([x])[0]
         return self.model.classes_[probs.argmax()], probs.max()
 
-    def parse(self, doc: Document, relations: List[Relation] = None):
+    def parse(self, doc: ParsedDocument, relations: List[Relation] = None, **kwargs):
         if relations is None:
             raise ValueError('Component needs connectives already classified.')
         for relation in filter(lambda r: r.type == "Explicit", relations):
@@ -117,8 +117,8 @@ class ExplicitSenseClassifier(Component):
 @click.argument('conll-path')
 def main(conll_path):
     logger = init_logger()
-    docs_train = load_conll_dataset(os.path.join(conll_path, 'en.train'))
-    docs_val = load_conll_dataset(os.path.join(conll_path, 'en.dev'))
+    docs_train = load_parsed_conll_dataset(os.path.join(conll_path, 'en.train'))
+    docs_val = load_parsed_conll_dataset(os.path.join(conll_path, 'en.dev'))
 
     clf = ExplicitSenseClassifier()
     logger.info('Train model')
@@ -128,7 +128,7 @@ def main(conll_path):
     logger.info('Evaluation on TEST')
     clf.score(docs_val)
     logger.info('Parse one document')
-    print(clf.parse(docs_val[0], docs_val[0].relations))
+    print(clf.parse(docs_val[0], docs_val[0].relations, ))
 
 
 if __name__ == "__main__":

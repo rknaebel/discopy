@@ -17,7 +17,7 @@ class Component:
     def score(self, docs: List[Document]):
         raise NotImplementedError()
 
-    def parse(self, doc: Document, relations: List[Relation] = None):
+    def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         raise NotImplementedError()
 
 

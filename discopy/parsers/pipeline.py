@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Union
 
 import click
 
@@ -8,8 +8,8 @@ from discopy.components.component import Component
 from discopy.components.connective.base import ConnectiveClassifier
 from discopy.components.sense.explicit.base import ExplicitSenseClassifier
 from discopy.components.sense.implicit.base import NonExplicitSenseClassifier
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_conll_dataset
+from discopy.data.doc import ParsedDocument, BertDocument
+from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.data.relation import Relation
 from discopy.evaluate.conll import print_results, evaluate_docs, evaluate_docs_average
 from discopy.utils import init_logger
@@ -25,17 +25,17 @@ class ParserPipeline:
             else:
                 raise TypeError('Components should consist of Component instances only.')
 
-    def __call__(self, doc: Document):
+    def __call__(self, doc: Union[ParsedDocument, BertDocument]):
         relations: List[Relation] = []
         for c in self.components:
             relations = c.parse(doc, relations)
-        return Document(doc_id=doc.doc_id, sentences=doc.sentences, relations=relations)
+        return doc.__class__(doc_id=doc.doc_id, sentences=doc.sentences, relations=relations)
 
-    def fit(self, docs: List[Document]):
+    def fit(self, docs: List[Union[ParsedDocument, BertDocument]]):
         for c in self.components:
             c.fit(docs)
 
-    def score(self, docs: List[Document]):
+    def score(self, docs: List[Union[ParsedDocument, BertDocument]]):
         for c in self.components:
             c.score(docs)
 
@@ -53,7 +53,7 @@ class ParserPipeline:
 def main(conll_path):
     logger = init_logger()
     # docs_train = load_conll_dataset(os.path.join(conll_path, 'en.train'), simple_connectives=True)
-    docs_val = load_conll_dataset(os.path.join(conll_path, 'en.dev'), simple_connectives=True)
+    docs_val = load_parsed_conll_dataset(os.path.join(conll_path, 'en.dev'), simple_connectives=True)
 
     parser = ParserPipeline([
         ConnectiveClassifier(),
