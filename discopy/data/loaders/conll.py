@@ -5,6 +5,7 @@ from typing import List
 
 import joblib
 
+from discopy.components.nn.bert import get_sentence_embeddings
 from discopy.conn_head_mapper import ConnHeadMapper
 from discopy.data.doc import ParsedDocument, BertDocument
 from discopy.data.sentence import ParsedSentence, DepRel, BertSentence
@@ -55,9 +56,15 @@ def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List
 
 def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, cache_dir='') -> List[BertDocument]:
     if cache_dir and os.path.exists(cache_dir):
-        return joblib.load(cache_dir)
-    tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
-    model = TFAutoModel.from_pretrained('bert-base-cased')
+        doc_embeddings = joblib.load(cache_dir)
+        tokenizer = None
+        model = None
+        preloaded = True
+    else:
+        doc_embeddings = {}
+        tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
+        model = TFAutoModel.from_pretrained('bert-base-cased')
+        preloaded = False
     parses_path = os.path.join(conll_path, 'parses.json')
     relations_path = os.path.join(conll_path, 'relations.json')
     docs = []
@@ -78,8 +85,12 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, 
                 for w_i, (surface, t) in enumerate(sent['words'])
             ]
             words.extend(sent_words)
+            if preloaded:
+                embeddings = doc_embeddings[doc_id][token_offset:token_offset + len(sent_words)]
+            else:
+                embeddings = get_sentence_embeddings(sent_words, tokenizer, model)
+            sents.append(BertSentence(sent_words, embeddings))
             token_offset += len(sent_words)
-            sents.append(BertSentence.from_tokens(sent_words, tokenizer, model))
         doc_pdtb = pdtb.get(doc_id, [])
         if simple_connectives:
             connective_head(doc_pdtb)
@@ -89,9 +100,12 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, 
                      [words[i[2]] for i in rel['Connective']['TokenList']],
                      rel['Sense'], rel['Type']) for rel in doc_pdtb
         ]
-        docs.append(BertDocument(doc_id=doc_id, sentences=sents, relations=relations))
-    if cache_dir:
-        joblib.dump(docs, cache_dir)
+        doc = BertDocument(doc_id=doc_id, sentences=sents, relations=relations)
+        if cache_dir and not preloaded:
+            doc_embeddings[doc.doc_id] = doc.get_embeddings()
+        docs.append(doc)
+    if cache_dir and not preloaded:
+        joblib.dump(doc_embeddings, cache_dir)
     return docs
 
 

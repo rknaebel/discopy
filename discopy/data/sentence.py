@@ -56,11 +56,6 @@ class BertSentence(Sentence):
         super().__init__(tokens)
         self.embeddings: np.array = embeddings
 
-    @staticmethod
-    def from_tokens(tokens, tokenizer, model):
-        embeddings = get_sentence_embeddings(tokens, tokenizer, model)
-        return BertSentence(tokens, embeddings)
-
     def get_embeddings(self):
         return self.embeddings
 
