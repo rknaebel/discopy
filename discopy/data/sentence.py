@@ -3,7 +3,6 @@ from typing import List, Optional
 
 import numpy as np
 import nltk
-from transformers import AutoTokenizer, TFAutoModel
 
 from discopy.components.nn.bert import get_sentence_embeddings
 from discopy.data.token import Token
@@ -53,14 +52,17 @@ class ParsedSentence(Sentence):
 
 
 class BertSentence(Sentence):
-    def __init__(self, tokens, tokenizer, model, device='cpu'):
+    def __init__(self, tokens, embeddings: np.array):
         super().__init__(tokens)
-        self.embeddings: np.array = self.get_embeddings(tokenizer, model, device)
+        self.embeddings: np.array = embeddings
 
-    def get_embeddings(self, tokenizer=None, model=None, device='cpu'):
-        tokenizer = tokenizer or AutoTokenizer.from_pretrained('bert-base-cased')
-        model = model or TFAutoModel.from_pretrained('bert-base-cased')
-        return get_sentence_embeddings(self.tokens, tokenizer, model, device)
+    @staticmethod
+    def from_tokens(tokens, tokenizer, model):
+        embeddings = get_sentence_embeddings(tokens, tokenizer, model)
+        return BertSentence(tokens, embeddings)
+
+    def get_embeddings(self):
+        return self.embeddings
 
     def to_json(self) -> dict:
         return {

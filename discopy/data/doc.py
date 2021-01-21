@@ -1,7 +1,7 @@
 import json
 from typing import List
+
 import numpy as np
-from transformers import AutoTokenizer, TFAutoModel
 
 from discopy.data.relation import Relation
 from discopy.data.sentence import ParsedSentence, BertSentence
@@ -37,18 +37,11 @@ class BertDocument:
         self.relations: List[Relation] = relations
         self.text = '\n'.join([s.get_text() for s in self.sentences])
 
-    @classmethod
-    def from_document(cls, doc: ParsedDocument, tokenizer=None, model=None, device='cpu'):
-        tokenizer = tokenizer or AutoTokenizer.from_pretrained('bert-base-cased')
-        model = model or TFAutoModel.from_pretrained('bert-base-cased')
-        sentences = [BertSentence(s.tokens, tokenizer, model, device) for s in doc.sentences]
-        return BertDocument(doc.doc_id, sentences, doc.relations)
-
     def get_tokens(self):
         return [token for sent in self.sentences for token in sent.tokens]
 
     def get_embeddings(self) -> np.array:
-        return np.concatenate([s.embeddings for s in self.sentences])
+        return np.concatenate([s.get_embeddings() for s in self.sentences])
 
     def to_json(self):
         return {
@@ -62,5 +55,4 @@ class BertDocument:
         return json.dumps(self.to_json(), indent=2)
 
     def get_explicit_relations(self):
-        return ParsedDocument(doc_id=self.doc_id, sentences=self.sentences,
-                              relations=[r for r in self.relations if r.is_explicit()])
+        return [r for r in self.relations if r.is_explicit()]

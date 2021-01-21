@@ -125,12 +125,14 @@ class ConnectiveClassifier(Component):
 @click.argument('conll-path')
 def main(conll_path):
     logger = init_logger()
-    docs_val = load_bert_conll_dataset(os.path.join(conll_path, 'en.dev'), device='cuda')
+    docs_val = load_bert_conll_dataset(os.path.join(conll_path, 'en.dev'),
+                                       cache_dir=os.path.join(conll_path, 'en.dev.bert.joblib'))
     clf = ConnectiveClassifier()
     try:
         clf.load('models/nn')
     except FileNotFoundError:
-        docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'), device='cuda')
+        docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'),
+                                             cache_dir=os.path.join(conll_path, 'en.train.bert.joblib'))
         logger.info('Train model')
         clf.fit(docs_train, docs_val)
         logger.info('Evaluation on TRAIN')

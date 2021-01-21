@@ -53,8 +53,7 @@ def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List
     return docs
 
 
-def load_bert_conll_dataset(conll_path: str, simple_connectives=False,
-                            limit=0, cache_dir='', device='cpu') -> List[BertDocument]:
+def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, cache_dir='') -> List[BertDocument]:
     if cache_dir and os.path.exists(cache_dir):
         return joblib.load(cache_dir)
     tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
@@ -80,7 +79,7 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False,
             ]
             words.extend(sent_words)
             token_offset += len(sent_words)
-            sents.append(BertSentence(sent_words, tokenizer, model, device))
+            sents.append(BertSentence.from_tokens(sent_words, tokenizer, model))
         doc_pdtb = pdtb.get(doc_id, [])
         if simple_connectives:
             connective_head(doc_pdtb)
