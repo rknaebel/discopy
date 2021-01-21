@@ -1,45 +1,75 @@
-import os
+import math
 from collections import Counter
 from typing import List
 
-import click
 import numpy as np
+import tensorflow as tf
 from tqdm import tqdm
 
 from discopy.data.doc import BertDocument
-from discopy.data.loaders.conll import load_bert_conll_dataset
 from discopy.data.relation import Relation
 from discopy.data.token import Token
 
 
-def generate_pdtb_features(docs: List[BertDocument], window_length: int, sense_map,
-                           explicits_only: bool = False, positives_only: bool = False):
+def get_class_weights(y, smooth_factor=0.0):
     """
-    Args:
-        docs:
-        window_length (int):
-        sense_map:
-        explicits_only (bool):
-        positives_only (bool):
+    Returns the weights for each class based on the frequencies of the samples
+    :param smooth_factor: factor that smooths extremely uneven weights
+    :param y: list of true labels (the labels must be hashable)
+    :return: dictionary with the weight for each class
     """
-    token_windows, arg_labels, senses = [], [], []
-    for doc in tqdm(docs):
-        doc_bert = doc.get_embeddings()
-        res = extract_document_training_windows(doc, doc_bert, sense_map, window_length, explicits_only, positives_only)
-        if res is not None:
-            doc_windows, doc_arg_labels, doc_senses = res
-            token_windows.append(doc_windows)
-            arg_labels.append(doc_arg_labels)
-            senses.append(doc_senses)
-    arg_labels = np.concatenate(arg_labels)
-    arg_labels = np.clip(arg_labels, 0, 3)
-    arg_labels = (np.arange(4) == arg_labels[..., None]).astype(bool)
-    senses = np.concatenate(senses)
-    senses = (np.arange(senses.max() + 1) == senses[..., None]).astype(bool)
-    token_windows = np.concatenate(token_windows)
-    # create shuffled indices for return values
-    perm = np.random.permutation(len(arg_labels))
-    return token_windows[perm], arg_labels[perm], senses[perm]
+    counter = Counter(y)
+    if smooth_factor > 0.0:
+        p = max(counter.values()) * smooth_factor
+        for k in counter.keys():
+            counter[k] += p
+    majority = max(counter.values())
+    return {cls: float(majority / count) for cls, count in counter.items()}
+
+
+class PDTBWindowSequence(tf.keras.utils.Sequence):
+    def __init__(self, docs: List[BertDocument], window_length: int, sense_map, batch_size: int,
+                 explicits_only: bool = False, positives_only: bool = False):
+        self.docs = []
+        for doc in tqdm(docs):
+            doc_bert = doc.get_embeddings()
+            extraction = extract_document_training_windows(doc, doc_bert, sense_map, window_length, explicits_only,
+                                                           positives_only)
+            if extraction is not None:
+                doc_windows, arg_labels, senses = extraction
+                arg_labels = np.clip(arg_labels, 0, 3)
+                arg_labels = (np.arange(4) == arg_labels[..., None]).astype(bool)
+                senses = (np.arange(senses.max() + 1) == senses[..., None]).astype(bool)
+                self.docs.append({
+                    'doc_id': doc.doc_id,
+                    'nb': len(senses),
+                    'windows': doc_windows,
+                    'args': arg_labels,
+                    'senses': senses
+                })
+        self.instances = np.array(
+            [[doc_id, i] for doc_id, doc_windows in enumerate(self.docs) for i in range(doc_windows['nb'])])
+        rng = np.random.default_rng()
+        rng.shuffle(self.instances)
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return math.ceil(len(self.instances) / self.batch_size)
+
+    def __getitem__(self, idx):
+        idxs = self.instances[idx * self.batch_size:(idx + 1) * self.batch_size]
+        windows = np.stack([self.docs[doc_id]['windows'][i] for doc_id, i in idxs])
+        args = np.stack([self.docs[doc_id]['args'][i] for doc_id, i in idxs])
+        return windows, args
+
+    def on_epoch_end(self):
+        rng = np.random.default_rng()
+        rng.shuffle(self.instances)
+
+    def get_balanced_class_weights(self):
+        y = np.concatenate([doc['args'] for doc in self.docs])
+        y = y.argmax(-1).flatten()
+        return get_class_weights(y, 0)
 
 
 def extract_document_training_windows(doc: BertDocument, bert_doc, sense_map, size=100,

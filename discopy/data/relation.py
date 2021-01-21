@@ -46,12 +46,12 @@ class Relation:
     def __eq__(self, other):
         return (self.arg1 == other.arg1) and (self.arg2 == other.arg2) and (self.conn == other.conn)
 
-    # def __and__(self, other):
-    #     r = Relation()
-    #     r.arg1 = self.arg1 & other.arg1
-    #     r.arg2 = self.arg2 & other.arg2
-    #     r.conn = self.conn & other.conn
-    #     return r
+    def __and__(self, other):
+        r = Relation()
+        r.arg1 = self.arg1 & other.arg1
+        r.arg2 = self.arg2 & other.arg2
+        r.conn = self.conn & other.conn
+        return r
 
     def __or__(self, other):
         r = Relation()
