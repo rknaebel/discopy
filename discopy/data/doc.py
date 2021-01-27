@@ -22,6 +22,9 @@ class ParsedDocument:
             'relations': [r.to_json(self.doc_id, rel_id=r_i) for r_i, r in enumerate(self.relations)]
         }
 
+    def with_relations(self, relations):
+        return ParsedDocument(self.doc_id, self.sentences, relations)
+
     def __str__(self):
         return json.dumps(self.to_json(), indent=2)
 
@@ -31,17 +34,21 @@ class ParsedDocument:
 
 
 class BertDocument:
-    def __init__(self, doc_id, sentences: List[BertSentence], relations):
+    def __init__(self, doc_id, sentences: List[BertSentence], relations, embedding_dim: int):
         self.doc_id = doc_id
         self.sentences: List[BertSentence] = sentences
         self.relations: List[Relation] = relations
         self.text = '\n'.join([s.get_text() for s in self.sentences])
+        self.embedding_dim = embedding_dim
 
     def get_tokens(self):
         return [token for sent in self.sentences for token in sent.tokens]
 
     def get_embeddings(self) -> np.array:
-        return np.concatenate([s.get_embeddings() for s in self.sentences])
+        return np.concatenate([s.get_embeddings() for s in self.sentences], axis=0)
+
+    def with_relations(self, relations):
+        return BertDocument(self.doc_id, self.sentences, relations, self.embedding_dim)
 
     def to_json(self):
         return {
