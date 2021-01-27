@@ -53,6 +53,7 @@ class AbstractArgumentExtractor(Component):
 
     def __init__(self, window_length, hidden_dim, rnn_dim, explicits_only=False, positives_only=False,
                  fn: str = '', ckpt_path: str = ''):
+        super().__init__(used_features=['vectors'])
         self.window_length = window_length
         self.hidden_dim = hidden_dim
         self.rnn_dim = rnn_dim

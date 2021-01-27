@@ -104,6 +104,7 @@ def generate_pdtb_features(docs: List[ParsedDocument]):
 
 class NonExplicitSenseClassifier(Component):
     def __init__(self):
+        super().__init__(used_features=['ptree', 'dtree'])
         self.model = Pipeline([
             ('union', FeatureUnion([
                 ('productions', Pipeline([
