@@ -4,7 +4,6 @@ from typing import List, Optional
 import numpy as np
 import nltk
 
-from discopy.components.nn.bert import get_sentence_embeddings
 from discopy.data.token import Token
 
 
