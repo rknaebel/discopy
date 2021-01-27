@@ -31,6 +31,16 @@ def get_sentence_embeddings(tokens: List[Token], tokenizer, model):
         len_left += length
     return embeddings
 
+
+def get_sentence_vector_embeddings(tokens: List[Token], embedding_index, mean, std):
+    embedding_dim = len(next(iter(embedding_index.values())))
+    embeddings = np.random.normal(mean, std, (len(tokens), embedding_dim))
+    for i, tok in enumerate(tokens):
+        tok = simple_map.get(tok.surface, tok.surface)
+        if tok in embedding_index:
+            embeddings[i] = embedding_index[tok]
+    return embeddings
+
 # def get_doc_sentence_embeddings(sent_tokens: List[List[Token]], tokenizer, model):
 #     lengths = []
 #     inputs = []

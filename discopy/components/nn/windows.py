@@ -28,17 +28,17 @@ def get_class_weights(y, smooth_factor=0.0):
 
 
 class PDTBWindowSequence(tf.keras.utils.Sequence):
-    def __init__(self, docs: List[BertDocument], window_length: int, sense_map, batch_size: int,
+    def __init__(self, docs: List[BertDocument], window_length: int, sense_map, batch_size: int, nb_classes: int,
                  explicits_only: bool = False, positives_only: bool = False):
+        self.rng = np.random.default_rng()
         self.docs = []
         for doc in tqdm(docs):
-            doc_bert = doc.get_embeddings()
-            extraction = extract_document_training_windows(doc, doc_bert, sense_map, window_length, explicits_only,
+            extraction = extract_document_training_windows(doc, sense_map, window_length, explicits_only,
                                                            positives_only)
             if extraction is not None:
                 doc_windows, arg_labels, senses = extraction
-                arg_labels = np.clip(arg_labels, 0, 3)
-                arg_labels = (np.arange(4) == arg_labels[..., None]).astype(bool)
+                arg_labels = np.clip(arg_labels, 0, nb_classes - 1)
+                arg_labels = (np.arange(nb_classes) == arg_labels[..., None]).astype(bool)
                 senses = (np.arange(senses.max() + 1) == senses[..., None]).astype(bool)
                 self.docs.append({
                     'doc_id': doc.doc_id,
@@ -49,8 +49,7 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
                 })
         self.instances = np.array(
             [[doc_id, i] for doc_id, doc_windows in enumerate(self.docs) for i in range(doc_windows['nb'])])
-        rng = np.random.default_rng()
-        rng.shuffle(self.instances)
+        self.rng.shuffle(self.instances)
         self.batch_size = batch_size
 
     def __len__(self):
@@ -63,8 +62,7 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
         return windows, args
 
     def on_epoch_end(self):
-        rng = np.random.default_rng()
-        rng.shuffle(self.instances)
+        self.rng.shuffle(self.instances)
 
     def get_balanced_class_weights(self):
         y = np.concatenate([doc['args'] for doc in self.docs])
@@ -72,32 +70,26 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
         return get_class_weights(y, 0)
 
 
-def extract_document_training_windows(doc: BertDocument, bert_doc, sense_map, size=100,
-                                      explicits_only: bool = False, positives_only=False):
+def extract_document_training_windows(doc: BertDocument, sense_map, size=100, explicits_only: bool = False,
+                                      positives_only=False):
     """
     Args:
         doc (BertDocument):
-        bert_doc:
         sense_map:
         size:
         explicits_only:
         positives_only:
     """
+    bert_doc = doc.get_embeddings()
     left_side = size // 2
     right_size = size - left_side
     repeats = 3
-    doc_relations = [r for r in doc.relations if not explicits_only or r.type == 'Explicit']
+    doc_relations = [r for r in doc.relations if not explicits_only or r.is_explicit()]
     if not len(doc_relations):
         return None
 
-    relations = np.zeros((len(doc_relations), len(bert_doc)), np.uint8)
-    for r_i, r in enumerate(doc_relations):
-        relations[r_i, [t.idx for t in r.conn.tokens]] = 3
-        relations[r_i, [t.idx for t in r.arg2.tokens]] = 2
-        relations[r_i, [t.idx for t in r.arg1.tokens]] = 1
-
-    hashes = np.pad(bert_doc, mode='constant', pad_width=((size, size), (0, 0)), constant_values=0)
-    relations = np.pad(relations, ((0, 0), (size, size)), mode='constant', constant_values=0)
+    hashes = np.pad(bert_doc, pad_width=((size, size), (0, 0)), mode='constant', constant_values=0)
+    relations = get_relations_matrix(doc_relations, len(bert_doc), size)
     centroids = relations.argmax(1)
 
     # differentiate context and non-context embeddings
@@ -148,6 +140,15 @@ def extract_document_training_windows(doc: BertDocument, bert_doc, sense_map, si
         arg_labels = pos_rel_window
         senses = pos_senses
     return token_windows, arg_labels, senses
+
+
+def get_relations_matrix(doc_relations: List[Relation], doc_length: int, pad_size: int):
+    relations = np.zeros((len(doc_relations), doc_length), np.uint8)
+    for r_i, r in enumerate(doc_relations):
+        relations[r_i, [t.idx for t in r.arg1.tokens]] = 1
+        relations[r_i, [t.idx for t in r.arg2.tokens]] = 2
+        relations[r_i, [t.idx for t in r.conn.tokens]] = 3
+    return np.pad(relations, pad_width=((0, 0), (pad_size, pad_size)), mode='constant', constant_values=0)
 
 
 def extract_windows(embeddings, size, strides, offset):
