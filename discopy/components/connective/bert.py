@@ -63,8 +63,9 @@ def generate_pdtb_features(docs: List[BertDocument], used_context=0):
 
 
 class ConnectiveClassifier(Component):
-    def __init__(self, used_context: int = 0):
-        in_size = 768 + 2 * used_context * 768
+    def __init__(self, input_dim, used_context: int = 0):
+        super().__init__(used_features=['vectors'])
+        in_size = input_dim + 2 * used_context * input_dim
         self.model = get_conn_model(in_size, 1, 1024)
         self.used_context = used_context
 

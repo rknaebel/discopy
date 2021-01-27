@@ -112,6 +112,7 @@ def generate_pdtb_features(docs: List[ParsedDocument], window_side_size=2):
 
 class GoshArgumentExtractor(Component):
     def __init__(self, window_side_size=2):
+        super().__init__(used_features=['ptree', 'dtree'])
         self.id = 'gosh_arg_extract'
         self.window_side_size = window_side_size
         self.arg1_model = CRF(algorithm='l2sgd', verbose=True, min_freq=5)

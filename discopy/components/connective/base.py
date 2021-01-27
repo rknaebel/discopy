@@ -106,6 +106,7 @@ def generate_pdtb_features(docs: List[ParsedDocument]):
 
 class ConnectiveClassifier(Component):
     def __init__(self):
+        super().__init__(used_features=['ptree'])
         self.model = Pipeline([
             ('vectorizer', DictVectorizer()),
             ('variance', VarianceThreshold(threshold=0.0001)),
