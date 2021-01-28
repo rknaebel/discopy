@@ -22,12 +22,13 @@ logger = logging.getLogger('discopy')
 class SkMetrics(tf.keras.callbacks.Callback):
     def __init__(self, ds):
         super().__init__()
-        self.ds = ds
+        y = [(windows, args) for windows, args in ds]
+        self.windows = np.concatenate([windows for windows, args in y], axis=0)
+        self.args = np.concatenate([args for windows, args in y], axis=0)
 
     def on_epoch_end(self, epoch, logs={}):
-        y_pred = np.concatenate(self.model.predict(self.ds).argmax(-1))
-        y = np.concatenate([args for windows, args in self.ds])
-        y = np.concatenate(y.argmax(-1))
+        y_pred = np.concatenate(self.model.predict(self.windows).argmax(-1))
+        y = np.concatenate(self.args.argmax(-1))
         report = classification_report(y, y_pred,
                                        output_dict=False,
                                        target_names=['None', 'Arg1', 'Arg2', 'Conn'], labels=range(4),
@@ -37,12 +38,13 @@ class SkMetrics(tf.keras.callbacks.Callback):
             logger.info(line)
 
 
-def get_model(max_seq_len, hidden_dim, rnn_dim, nb_classes):
-    x = y = tf.keras.layers.Input(shape=(max_seq_len, 768), name='window-input')
+def get_model(max_seq_len, hidden_dim, rnn_dim, nb_classes, input_size):
+    x = y = tf.keras.layers.Input(shape=(max_seq_len, input_size), name='window-input')
     y = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(rnn_dim, return_sequences=True), name='rnn')(y)
-    # y = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(rnn_dim, return_sequences=True), name='hidden-rnn2')(y)
+    y = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(rnn_dim, return_sequences=True), name='rnn2')(y)
     y = tf.keras.layers.Dropout(0.2)(y)
-    y = tf.keras.layers.Dense(hidden_dim, activation='relu', name='dense')(y)
+    y = tf.keras.layers.Dense(hidden_dim, activation='relu', name='dense',
+                              kernel_regularizer=tf.keras.regularizers.L2(l2=0.001))(y)
     y = tf.keras.layers.Dropout(0.2)(y)
     y = tf.keras.layers.Dense(nb_classes, activation='softmax', name='args')(y)
     model = tf.keras.models.Model(x, y)
@@ -51,33 +53,36 @@ def get_model(max_seq_len, hidden_dim, rnn_dim, nb_classes):
 
 class AbstractArgumentExtractor(Component):
 
-    def __init__(self, window_length, hidden_dim, rnn_dim, explicits_only=False, positives_only=False,
+    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim, nb_classes, explicits_only=False,
+                 positives_only=False,
                  fn: str = '', ckpt_path: str = ''):
         super().__init__(used_features=['vectors'])
         self.window_length = window_length
         self.hidden_dim = hidden_dim
         self.rnn_dim = rnn_dim
+        self.nb_classes = nb_classes
         self.explicits_only = explicits_only
         self.positives_only = positives_only
         self.fn = fn
         self.checkpoint_path = ckpt_path
-        self.model = get_model(self.window_length, self.hidden_dim, self.rnn_dim, 4)
+        if not os.path.exists(ckpt_path):
+            os.makedirs(ckpt_path)
+        self.model = get_model(self.window_length, self.hidden_dim, self.rnn_dim, nb_classes, input_dim)
         self.compiled = False
         self.sense_map = {}
         self.callbacks = []
-        self.epochs = 10
-        self.batch_size = 256
+        self.epochs = 25
+        self.batch_size = 512
         self.metrics = [
             tf.keras.metrics.Precision(name="precision"),
             tf.keras.metrics.Recall(name="recall"),
             tf.keras.metrics.AUC(name="ROC"),
         ]
-        self.optimizer = tf.keras.optimizers.Adam(lr=0.001, amsgrad=True)
+        self.optimizer = tf.keras.optimizers.Adam(amsgrad=True)
 
-    def get_loss(self, precomputed_weights=None):
+    def get_loss(self, class_weights):
         def loss(onehot_labels, logits):
-            class_weights = precomputed_weights or [1.0, 9.0, 9.5, 110.0]
-            c_weights = np.array([class_weights[i] for i in range(4)])
+            c_weights = np.array([class_weights[i] for i in range(self.nb_classes)])
             unweighted_losses = tf.nn.softmax_cross_entropy_with_logits(labels=onehot_labels, logits=logits)
             weights = tf.reduce_sum(tf.multiply(tf.cast(onehot_labels, tf.float32), c_weights), axis=-1)
             weighted_losses = unweighted_losses * weights  # reduce the result to get your final loss
@@ -90,7 +95,7 @@ class AbstractArgumentExtractor(Component):
         self.sense_map = json.load(open(os.path.join(path, 'senses.json'), 'r'))
         if not os.path.exists(os.path.join(path, self.fn)):
             raise FileNotFoundError("Model not found.")
-        self.model = tf.keras.models.load_model(os.path.join(path, self.fn))
+        self.model = tf.keras.models.load_model(os.path.join(path, self.fn), compile=False)
 
     def save(self, path):
         if not os.path.exists(path):
@@ -102,9 +107,11 @@ class AbstractArgumentExtractor(Component):
         self.sense_map = {v: k for k, v in enumerate(
             ['NoSense'] + sorted({s for doc in docs_train for rel in doc.relations for s in rel.senses}))}
         ds_train = PDTBWindowSequence(docs_train, self.window_length, self.sense_map, batch_size=self.batch_size,
+                                      nb_classes=self.nb_classes,
                                       explicits_only=self.explicits_only,
                                       positives_only=self.positives_only)
         ds_val = PDTBWindowSequence(docs_val, self.window_length, self.sense_map, batch_size=self.batch_size,
+                                    nb_classes=self.nb_classes,
                                     explicits_only=self.explicits_only,
                                     positives_only=self.positives_only)
         print("train", ds_train.get_balanced_class_weights())
@@ -117,10 +124,10 @@ class AbstractArgumentExtractor(Component):
             self.compiled = True
         self.model.summary()
         self.callbacks = [
-            tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.85, patience=1, min_lr=0.00001,
+            tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=1, min_lr=0.00001,
                                                  verbose=2),
             # tf.keras.callbacks.LearningRateScheduler(scheduler),
-            tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, restore_best_weights=True,
+            tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, min_delta=0.001, restore_best_weights=True,
                                              verbose=1),
             SkMetrics(ds_val),
         ]
@@ -140,11 +147,14 @@ class AbstractArgumentExtractor(Component):
 
     def score(self, docs: List[BertDocument]):
         ds = PDTBWindowSequence(docs, self.window_length, self.sense_map, batch_size=self.batch_size,
+                                nb_classes=self.nb_classes,
                                 explicits_only=self.explicits_only,
                                 positives_only=self.positives_only)
-        y_pred = np.concatenate(self.model.predict(ds).argmax(-1))
-        y = np.concatenate([args for windows, args in ds])
-        y = np.concatenate(y.argmax(-1))
+        y = [(windows, args) for windows, args in ds]
+        windows = np.concatenate([windows for windows, args in y], axis=0)
+        args = np.concatenate([args for windows, args in y], axis=0)
+        y_pred = np.concatenate(self.model.predict(windows).argmax(-1))
+        y = np.concatenate(args.argmax(-1))
         logger.info("Evaluation: {}".format(self.fn))
         report = classification_report(y, y_pred,
                                        output_dict=False,
@@ -159,8 +169,9 @@ class AbstractArgumentExtractor(Component):
 
 
 class ExplicitArgumentExtractor(AbstractArgumentExtractor):
-    def __init__(self, window_length, hidden_dim, rnn_dim):
-        super().__init__(window_length, hidden_dim, rnn_dim, fn='nea', explicits_only=True, positives_only=False)
+    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
+        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, fn='nea', explicits_only=True,
+                         positives_only=False)
 
     def parse(self, doc: BertDocument, relations: List[Relation] = None,
               batch_size=64, strides=1, max_distance=0.5, **kwargs):
@@ -175,8 +186,9 @@ class ExplicitArgumentExtractor(AbstractArgumentExtractor):
 
 
 class FullArgumentExtractor(AbstractArgumentExtractor):
-    def __init__(self, window_length, hidden_dim, rnn_dim):
-        super().__init__(window_length, hidden_dim, rnn_dim, fn='naa', explicits_only=False, positives_only=False)
+    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
+        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, fn='naa', explicits_only=False,
+                         positives_only=False)
 
     def parse(self, doc: BertDocument, relations: List[Relation] = None,
               batch_size=64, strides=1, max_distance=0.5, **kwargs):
@@ -191,60 +203,53 @@ class FullArgumentExtractor(AbstractArgumentExtractor):
 
 
 class ConnectiveArgumentExtractor(AbstractArgumentExtractor):
-    def __init__(self, window_length, hidden_dim, rnn_dim):
-        super().__init__(window_length, hidden_dim, rnn_dim, fn='nca', explicits_only=True, positives_only=True)
+    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim, ckpt_path=''):
+        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, fn='nca', nb_classes=3, explicits_only=True,
+                         positives_only=True, ckpt_path=ckpt_path)
 
     def parse(self, doc: BertDocument, relations: List[Relation] = None, **kwargs):
+        if not relations:
+            return []
         offset = self.window_length // 2
         doc_bert = doc.get_embeddings()
         tokens = doc.get_tokens()
         conn_pos = [min([i.idx for i in r.conn.tokens]) for r in relations]
         word_windows = extract_windows(doc_bert, self.window_length, 1, offset)
-        y_hat = self.model.predict(word_windows, batch_size=128)
+        y_hat = self.model.predict(word_windows, batch_size=256)
         relations_hat = predict_discourse_windows_for_id(tokens, y_hat, 1, offset)
-        relations = [relations_hat[i] for i in conn_pos]
+        for i, pos in enumerate(conn_pos):
+            r = relations[i]
+            pred = relations_hat[pos]
+            r.arg1.tokens = [t for t in pred.arg1.tokens if t not in r.conn.tokens]
+            r.arg2.tokens = [t for t in pred.arg2.tokens if t not in r.conn.tokens]
         return relations
-
-    def get_window_probs(self, tokens):
-        offset = self.window_length // 2
-        word_windows = extract_windows(tokens, self.window_length, 1, offset)
-        y_hat = self.model.predict(word_windows, batch_size=64)
-        return y_hat
-
-    def get_relations_for_window_probs(self, y_hat, tokens, relations):
-        offset = self.window_length // 2
-        conn_pos = [min([i[2] for i in r['Connective']['TokenList']]) for r in relations]
-        relations_hat = predict_discourse_windows_for_id(tokens, y_hat, 1, offset)
-        probs = y_hat.max(-1).mean(-1)[conn_pos]
-        relations = [relations_hat[i] for i in conn_pos]
-        return relations, probs
 
 
 @click.command()
-@click.argument('conll-path')
-def main(conll_path):
+@click.argument('bert-model', type=str)
+@click.argument('conll-path', type=str)
+def main(bert_model, conll_path):
     logger = init_logger()
     logger.info('Load dev data')
     docs_val = load_bert_conll_dataset(os.path.join(conll_path, 'en.dev'),
-                                       cache_dir=os.path.join(conll_path, 'en.dev.bert.joblib'))
+                                       simple_connectives=True,
+                                       cache_dir=os.path.join(conll_path, f'en.dev.{bert_model}.joblib'),
+                                       bert_model=bert_model)
     logger.info('Init model')
-    # clf = ExplicitArgumentExtractor(window_length=150, hidden_dim=64, rnn_dim=128)
-    clf = ConnectiveArgumentExtractor(window_length=100, hidden_dim=64, rnn_dim=512)
-    # try:
-    #     clf.load('models/nn')
-    # except FileNotFoundError:
+    # clf = ExplicitArgumentExtractor(window_length=150, input_dim=docs_val[0].embedding_dim, hidden_dim=64, rnn_dim=128)
+    clf = ConnectiveArgumentExtractor(window_length=100, input_dim=docs_val[0].embedding_dim, hidden_dim=256,
+                                      rnn_dim=512)
     logger.info('Load train data')
     docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'),
-                                         cache_dir=os.path.join(conll_path, 'en.train.bert.joblib'))
+                                         simple_connectives=True,
+                                         cache_dir=os.path.join(conll_path, f'en.train.{bert_model}.joblib'),
+                                         bert_model=bert_model)
     logger.info('Train model')
     clf.fit(docs_train, docs_val)
-    # logger.info('Evaluation on TRAIN')
-    # clf.score(docs_train)
     clf.save('models/nn')
     logger.info('Evaluation on TEST')
     clf.score(docs_val)
     logger.info('Parse one document')
-    # print(docs_val[0].to_json())
     print(clf.parse(docs_val[0], docs_val[0].get_explicit_relations()))
 
 
