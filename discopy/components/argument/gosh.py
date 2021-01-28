@@ -164,10 +164,10 @@ class GoshArgumentExtractor(Component):
         sent_features = []
 
         for i in range(-self.window_side_size, self.window_side_size + 1):
-            sent_i = arg2_sentence_id + i
-            if sent_i < 0 or sent_i >= len(doc.sentences):
+            sent_idx = arg2_sentence_id + i
+            if sent_idx < 0 or sent_idx >= len(doc.sentences):
                 continue
-            sent_i = doc.sentences[sent_i]
+            sent_i = doc.sentences[sent_idx]
             ptree_i = sent_i.get_ptree()
             if not ptree_i:
                 continue
