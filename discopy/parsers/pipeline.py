@@ -2,6 +2,7 @@ import os
 from typing import List, Union
 
 import click
+from tqdm import tqdm
 
 from discopy.components.argument.base import ExplicitArgumentExtractor, ImplicitArgumentExtractor
 from discopy.components.component import Component
@@ -29,11 +30,16 @@ class ParserPipeline:
         relations: List[Relation] = []
         for c in self.components:
             relations = c.parse(doc, relations)
-        return doc.__class__(doc_id=doc.doc_id, sentences=doc.sentences, relations=relations)
+        return doc.with_relations(relations)
 
-    def fit(self, docs: List[Union[ParsedDocument, BertDocument]]):
+    def parse(self, docs: List[Union[ParsedDocument, BertDocument]]):
+        return [self(doc) for doc in tqdm(docs)]
+
+    def fit(self, docs_train: List[Union[ParsedDocument, BertDocument]],
+            docs_val: List[Union[ParsedDocument, BertDocument]] = None):
         for c in self.components:
-            c.fit(docs)
+            print("train component:", c)
+            c.fit(docs_train, docs_val)
 
     def score(self, docs: List[Union[ParsedDocument, BertDocument]]):
         for c in self.components:
