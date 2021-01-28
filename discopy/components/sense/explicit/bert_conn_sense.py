@@ -1,6 +1,7 @@
+import json
 import logging
 import os
-from typing import List
+from typing import List, Dict
 
 import click
 import numpy as np
@@ -20,18 +21,16 @@ logger = logging.getLogger('discopy')
 
 
 def get_conn_model(in_size, out_size, hidden_size, hidden_size2=256):
-    if out_size == 1:
-        out_act = 'sigmoid'
-        loss = 'binary_crossentropy'
-    else:
-        out_act = 'softmax'
-        loss = 'sparse_categorical_crossentropy'
-    ipt_conn = tf.keras.layers.Input(shape=(in_size,), name='connective')
-    out_conn = tf.keras.layers.Dense(hidden_size, activation='selu')(ipt_conn)
-    out_conn = tf.keras.layers.Dense(hidden_size2, activation='selu')(out_conn)
-    out_conn = tf.keras.layers.Dense(out_size, activation=out_act)(out_conn)
-    model = tf.keras.models.Model(ipt_conn, out_conn)
-    model.compile('adam', loss, metrics=['accuracy'])
+    x = y = tf.keras.layers.Input(shape=(in_size,), name='connective')
+    y = tf.keras.layers.Dense(hidden_size, activation='selu')(y)
+    y = tf.keras.layers.Dropout(0.2)(y)
+    y = tf.keras.layers.Dense(hidden_size2, activation='selu')(y)
+    y = tf.keras.layers.Dropout(0.2)(y)
+    y = tf.keras.layers.Dense(out_size, activation='softmax')(y)
+    model = tf.keras.models.Model(x, y)
+    model.compile('adam', 'sparse_categorical_crossentropy', metrics=[
+        "accuracy",
+    ])
     return model
 
 
@@ -46,48 +45,84 @@ def get_bert_features(idxs, doc_bert, used_context=0):
     return embd
 
 
-def generate_pdtb_features(docs: List[BertDocument], used_context=0):
+def generate_pdtb_features(docs: List[BertDocument], sense_map: Dict[str, int], used_context=0):
     features = []
     for doc in tqdm(docs):
         doc_bert = doc.get_embeddings()
         global_id_map = {(s_i, t.local_idx): t.idx for s_i, s in enumerate(doc.sentences) for t in s.tokens}
-        conns = {tuple(t.idx for t in r.conn.tokens) for r in doc.get_explicit_relations()}
+        conns = {tuple(t.idx for t in r.conn.tokens): r.senses[0] for r in doc.get_explicit_relations()}
         for sent_i, sentence in enumerate(doc.sentences):
             for connective_candidate in get_connective_candidates(sentence):
                 conn_idxs = tuple(global_id_map[(sent_i, i)] for i, c in connective_candidate)
                 if conn_idxs in conns:
-                    features.append((get_bert_features(conn_idxs, doc_bert, used_context), 1))
+                    sense = sense_map.get(conns[conn_idxs])
+                    if not sense:
+                        continue
+                    features.append((get_bert_features(conn_idxs, doc_bert, used_context), sense))
                 else:
                     features.append((get_bert_features(conn_idxs, doc_bert, used_context), 0))
     x, y = list(zip(*features))
     return np.stack(x), np.array(y)
 
 
-class ConnectiveClassifier(Component):
+def get_sense_mapping(docs):
+    sense_map = {
+        'NoSense': 0,
+    }
+    senses = sorted({s for doc in docs for rel in doc.relations for s in rel.senses})
+    i = 1
+    for s in senses:
+        if s in sense_map:
+            sense_map[s] = sense_map[s]
+        else:
+            sense_map[s] = i
+            i += 1
+    classes = []
+    for sense, sense_id in sorted(sense_map.items(), key=lambda x: x[1]):
+        if len(classes) > sense_id:
+            continue
+        classes.append(sense)
+    return sense_map, classes
+
+
+class ConnectiveSenseClassifier(Component):
     def __init__(self, input_dim, used_context: int = 0):
         super().__init__(used_features=['vectors'])
-        in_size = input_dim + 2 * used_context * input_dim
-        self.model = get_conn_model(in_size, 1, 1024)
+        self.in_size = input_dim + 2 * used_context * input_dim
+        self.sense_map = {}
+        self.classes = []
+        self.model = None
         self.used_context = used_context
 
     def load(self, path):
-        if not os.path.exists(os.path.join(path, f'connective_nn_{self.used_context}.model')):
+        self.sense_map = json.load(open(os.path.join(path, 'senses.json'), 'r'))
+        self.classes = []
+        for sense, sense_id in sorted(self.sense_map.items(), key=lambda x: x[1]):
+            if len(self.classes) > sense_id:
+                continue
+            self.classes.append(sense)
+        if not os.path.exists(os.path.join(path, f'conn_sense_nn.model')):
             raise FileNotFoundError("Model not found.")
-        self.model = tf.keras.models.load_model(os.path.join(path, f'connective_nn_{self.used_context}.model'),
+        self.model = tf.keras.models.load_model(os.path.join(path, f'conn_sense_nn.model'),
                                                 compile=False)
 
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
-        self.model.save(os.path.join(path, f'connective_nn_{self.used_context}.model'))
+        self.model.save(os.path.join(path, f'conn_sense_nn.model'))
+        json.dump(self.sense_map, open(os.path.join(path, 'senses.json'), 'w'))
 
     def fit(self, docs_train: List[BertDocument], docs_val: List[BertDocument] = None):
         if docs_val is None:
             raise ValueError("Validation data is missing.")
-        x_train, y_train = generate_pdtb_features(docs_train, used_context=self.used_context)
-        x_val, y_val = generate_pdtb_features(docs_val, used_context=self.used_context)
+        self.sense_map, self.classes = get_sense_mapping(docs_train)
+        self.model = get_conn_model(self.in_size, len(self.sense_map), 2048)
+        self.model.summary()
+        print(self.sense_map, self.classes)
+        x_train, y_train = generate_pdtb_features(docs_train, self.sense_map, used_context=self.used_context)
+        x_val, y_val = generate_pdtb_features(docs_val, self.sense_map, used_context=self.used_context)
         self.model.fit(x_train, y_train, validation_data=(x_val, y_val), verbose=1, shuffle=True, epochs=10,
-                       batch_size=128,
+                       batch_size=256,
                        callbacks=[
                            tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0.001, patience=10, verbose=0,
                                                             restore_best_weights=True),
@@ -95,7 +130,7 @@ class ConnectiveClassifier(Component):
                        ])
 
     def score_on_features(self, x, y):
-        y_pred = self.model.predict(x).round()
+        y_pred = self.model.predict(x).argmax(-1)
         logger.info("Evaluation: Connective")
         logger.info("    Acc  : {:<06.4}".format(accuracy_score(y, y_pred)))
         prec, recall, f1, support = precision_recall_fscore_support(y, y_pred, average='macro')
@@ -103,10 +138,14 @@ class ConnectiveClassifier(Component):
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred)))
 
     def score(self, docs: List[BertDocument]):
-        x, y = generate_pdtb_features(docs, used_context=self.used_context)
+        if not self.model:
+            raise ValueError("Score of untrained model.")
+        x, y = generate_pdtb_features(docs, self.sense_map, used_context=self.used_context)
         self.score_on_features(x, y)
 
     def parse(self, doc: BertDocument, relations=None, **kwargs):
+        if not self.model:
+            raise ValueError("Score of untrained model.")
         relations: List[Relation] = []
         doc_bert = doc.get_embeddings()
         global_id_map = {(s_i, t.local_idx): t.idx for s_i, s in enumerate(doc.sentences) for t in s.tokens}
@@ -114,12 +153,13 @@ class ConnectiveClassifier(Component):
             for connective_candidate in get_connective_candidates(sent):
                 conn_idxs = tuple(global_id_map[(sent_i, i)] for i, c in connective_candidate)
                 features = get_bert_features(conn_idxs, doc_bert, self.used_context)
-                pred = self.model.predict(np.expand_dims(features, axis=0)).flatten()[0]
-                if pred > 0.5:
+                pred = self.model.predict(np.expand_dims(features, axis=0)).argmax(-1).flatten()[0]
+                if pred > 0:
                     conn_tokens = [sent.tokens[i] for i, c in connective_candidate]
                     relations.append(Relation(
                         conn=conn_tokens,
-                        type='Explicit'
+                        type='Explicit',
+                        senses=[self.classes[pred]]
                     ))
         return relations
 
@@ -130,17 +170,13 @@ def main(conll_path):
     logger = init_logger()
     docs_val = load_bert_conll_dataset(os.path.join(conll_path, 'en.dev'),
                                        cache_dir=os.path.join(conll_path, 'en.dev.bert-base-cased.joblib'))
-    clf = ConnectiveClassifier(input_dim=docs_val[0].embedding_dim)
-    try:
-        clf.load('models/nn')
-    except FileNotFoundError:
-        docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'),
-                                             cache_dir=os.path.join(conll_path, 'en.train.bert-base-cased.joblib'))
-        logger.info('Train model')
-        clf.fit(docs_train, docs_val)
-        logger.info('Evaluation on TRAIN')
-        clf.score(docs_train)
-        clf.save('models/nn')
+    docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'),
+                                         cache_dir=os.path.join(conll_path, 'en.train.bert-base-cased.joblib'))
+    clf = ConnectiveSenseClassifier(input_dim=docs_val[0].embedding_dim, used_context=2)
+    logger.info('Train model')
+    clf.fit(docs_train, docs_val)
+    logger.info('Evaluation on TRAIN')
+    clf.score(docs_train)
     logger.info('Evaluation on TEST')
     clf.score(docs_val)
     # logger.info('Parse one document')
