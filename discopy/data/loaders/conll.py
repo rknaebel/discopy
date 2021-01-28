@@ -16,6 +16,13 @@ from discopy.data.sentence import ParsedSentence, DepRel, BertSentence
 from discopy.data.token import Token
 
 
+def convert_sense(s, lvl):
+    if lvl > 0:
+        return '.'.join(s.split('.')[:lvl])
+    else:
+        return s
+
+
 def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List[ParsedDocument]:
     parses_path = os.path.join(conll_path, 'parses.json')
     relations_path = os.path.join(conll_path, 'relations.json')
@@ -57,7 +64,7 @@ def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List
 
 
 def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, cache_dir='',
-                            bert_model='bert-base-cased') -> List[BertDocument]:
+                            bert_model='bert-base-cased', sense_level=-1) -> List[BertDocument]:
     if cache_dir and os.path.exists(cache_dir):
         doc_embeddings = joblib.load(cache_dir)
         tokenizer = None
@@ -101,7 +108,7 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, 
             Relation([words[i[2]] for i in rel['Arg1']['TokenList']],
                      [words[i[2]] for i in rel['Arg2']['TokenList']],
                      [words[i[2]] for i in rel['Connective']['TokenList']],
-                     rel['Sense'], rel['Type']) for rel in doc_pdtb
+                     [convert_sense(s, sense_level) for s in rel['Sense']], rel['Type']) for rel in doc_pdtb
         ]
         doc = BertDocument(doc_id=doc_id, sentences=sents, relations=relations, embedding_dim=embeddings.shape[-1])
         if cache_dir and not preloaded:
