@@ -1,0 +1,14 @@
+numpy>=1.18.0
+cython
+nltk>=3.4
+joblib
+sklearn
+sklearn-crfsuite
+ujson>=2.0.0
+tensorflow>=2.1.0
+torch>=1.7.0
+spacy>=2.3.5
+supar>=1.0.0
+transformers>=3.5.0
+fastapi==0.61.2
+uvicorn==0.11.3

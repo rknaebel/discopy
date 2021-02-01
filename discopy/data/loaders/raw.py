@@ -5,9 +5,6 @@ from discopy.data.doc import ParsedDocument
 from discopy.data.sentence import ParsedSentence
 from discopy.data.token import Token
 from discopy.data.update import update_dataset_parses
-from discopy.utils import init_logger
-
-logger = init_logger()
 
 
 def load_texts(texts: List[str], simple_tags=False) -> List[ParsedDocument]:
