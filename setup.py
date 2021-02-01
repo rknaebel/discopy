@@ -14,15 +14,18 @@ setup(name='discopy-rknaebel',
       license='MIT',
       packages=find_packages(),
       install_requires=[
-          'numpy',
+          'numpy>=1.18.0',
           'cython',
-          'nltk',
+          'nltk>=3.4',
           'joblib',
           'sklearn',
           'sklearn-crfsuite',
-          'ujson',
-          'spacy',
-          'supar',
+          'ujson>=2.0.0',
+          'tensorflow>=2.1.0'
+          'torch>=1.4.0'
+          'spacy>=2.3.5',
+          'supar>=1.0.0',
+          'transformers>=3.5.0'
       ],
       zip_safe=False,
       entry_points={
@@ -31,5 +34,6 @@ setup(name='discopy-rknaebel',
               'discopy-test=cli.test:main',
               'discopy-parse=cli.parse:main',
           ],
-      }
+      },
+      python_requires='>=3.7',
       )
