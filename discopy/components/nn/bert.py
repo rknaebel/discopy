@@ -20,14 +20,12 @@ def get_sentence_embeddings(tokens: List[Token], tokenizer, model):
     lengths = [len(s) for s in subtokens]
     tokens_ids = tokenizer.convert_tokens_to_ids([ts for t in subtokens for ts in t])
     tokens_ids = tokenizer.build_inputs_with_special_tokens(tokens_ids)
-    outputs = model(np.array([tokens_ids]))
-    last_hidden_state = outputs.last_hidden_state.numpy()[0]
-    embeddings = np.zeros((len(lengths), last_hidden_state.shape[-1]), np.float32)
+    outputs = model(np.array([tokens_ids]), output_hidden_states=True)
+    hidden_state = outputs.hidden_states[-2][0].numpy()
+    embeddings = np.zeros((len(lengths), hidden_state.shape[-1]), np.float32)
     len_left = 1
     for i, length in enumerate(lengths):
-        embeddings[i] = np.concatenate([last_hidden_state[:1],
-                                        last_hidden_state[len_left:len_left + length],
-                                        last_hidden_state[-1:]]).mean(axis=0)
+        embeddings[i] = hidden_state[len_left]
         len_left += length
     return embeddings
 

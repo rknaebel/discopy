@@ -3,7 +3,7 @@ import os
 
 import click
 
-from discopy.components.argument.bert import ConnectiveArgumentExtractor
+from discopy.components.argument.bert.conn import ConnectiveArgumentExtractor
 from discopy.components.sense.explicit.bert_conn_sense import ConnectiveSenseClassifier
 from discopy.data.loaders.conll import load_bert_conll_dataset
 from discopy.evaluate.conll import print_results, evaluate_docs
@@ -44,13 +44,13 @@ def main(bert_model, conll_path, save_path, sense_lvl=2):
                                          sense_level=sense_lvl)
     logger.info('Init model')
     parser = ParserPipeline([
-        ConnectiveSenseClassifier(input_dim=docs_val[0].embedding_dim, used_context=1),
-        ConnectiveArgumentExtractor(window_length=100, input_dim=docs_val[0].embedding_dim, hidden_dim=512,
+        ConnectiveSenseClassifier(input_dim=docs_val[0].get_embedding_dim(), used_context=1),
+        ConnectiveArgumentExtractor(window_length=100, input_dim=docs_val[0].get_embedding_dim(), hidden_dim=256,
                                     rnn_dim=512, ckpt_path=save_path),
     ])
-    # logger.info('Train model')
-    # parser.fit(docs_train, docs_val)
-    # parser.save(save_path)
+    logger.info('Train model')
+    parser.fit(docs_train, docs_val)
+    parser.save(save_path)
     logger.info('LOAD model')
     parser.load(save_path)
     parser.score(docs_val)
