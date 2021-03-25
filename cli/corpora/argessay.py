@@ -48,7 +48,7 @@ def main(src, tgt):
     for doc_i, path in enumerate(sorted(glob.glob(os.path.join(src, '*.txt')))):
         content = open(path).readlines()
         doc = {
-            'docID': f'essay_{doc_i}',
+            'docID': f'essay_{doc_i:02}',
             'meta': {
                 'title': content[0].strip(),
                 'corpus': 'argumentative_essays',
@@ -58,7 +58,6 @@ def main(src, tgt):
         }
         parses = load_texts(texts=[doc['text']], nlp=nlp)[0]
         doc['sentences'] = [s.to_json() for s in parses.sentences]
-
         annos = [tuple(a.strip().split("\t")) for a in open(path[:-3] + 'ann').readlines()]
         arguments = extract_arguments(annos, doc['text'], doc_i)
         words = parses.get_tokens()
