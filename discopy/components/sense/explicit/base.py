@@ -1,7 +1,6 @@
 import logging
 import os
 import pickle
-import sys
 from typing import List
 
 import click
@@ -59,8 +58,10 @@ def generate_pdtb_features(docs: List[Document]):
 
 
 class ExplicitSenseClassifier(Component):
+    model_name = 'explicit_sense_base_classifier'
+    used_features = ['ptree']
+
     def __init__(self):
-        super().__init__(used_features=['ptree'])
         self.model = Pipeline([
             ('vectorizer', DictVectorizer()),
             ('variance', VarianceThreshold(threshold=0.0001)),

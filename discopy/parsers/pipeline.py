@@ -1,15 +1,12 @@
+import json
 import os
-from typing import List, Union
+from typing import List
 
-import click
 from tqdm import tqdm
 
-from discopy.components.argument.base import ExplicitArgumentExtractor, ImplicitArgumentExtractor
 from discopy.components.component import Component
 from discopy.data.doc import Document
 from discopy.data.relation import Relation
-from discopy.evaluate.conll import print_results, evaluate_docs, evaluate_docs_average
-from discopy.utils import init_logger
 
 
 class ParserPipeline:
@@ -34,7 +31,7 @@ class ParserPipeline:
     def fit(self, docs_train: List[Document],
             docs_val: List[Document] = None):
         for c in self.components:
-            print("train component:", c)
+            print("train component:", c.model_name)
             c.fit(docs_train, docs_val)
 
     def score(self, docs: List[Document]):
@@ -42,43 +39,22 @@ class ParserPipeline:
             c.score(docs)
 
     def save(self, path):
+        configs = []
         for c in self.components:
             c.save(path)
+            configs.append(c.get_config())
+        json.dump(configs, open(os.path.join(path, 'config.json'), 'w'))
+
+    @staticmethod
+    def from_config(path):
+        from discopy.parsers.utils import component_register
+        configs = json.load(open(os.path.join(path, 'config.json'), 'r'))
+        components = []
+        for config in configs:
+            model_name = config['model_name']
+            components.append(component_register[model_name].from_config(config))
+        return ParserPipeline(components)
 
     def load(self, path):
         for c in self.components:
             c.load(path)
-
-
-@click.command()
-@click.argument('conll-path')
-def main(conll_path):
-    logger = init_logger()
-    # docs_train = load_conll_dataset(os.path.join(conll_path, 'en.train'), simple_connectives=True)
-    docs_val = load_parsed_conll_dataset(os.path.join(conll_path, 'en.dev'), simple_connectives=True)
-
-    parser = ParserPipeline([
-        ConnectiveClassifier(),
-        ExplicitArgumentExtractor(),
-        ExplicitSenseClassifier(),
-        ImplicitArgumentExtractor(),
-        NonExplicitSenseClassifier()
-    ])
-    # logger.info('Train model')
-    # parser.fit(docs_train)
-    # logger.info('Evaluation on TRAIN')
-    # parser.score(docs_train)
-    # logger.info('Evaluation on TEST')
-    # parser.score(docs_val)
-    # logger.info('Save Parser')
-    # parser.save('models/lin-new')
-    parser.load('models/lin-new')
-    logger.info('Parse one document')
-    docs = [d.get_explicit_relations() for d in docs_val]
-    preds = [parser(d) for d in docs]
-    print_results(evaluate_docs(docs, preds))
-    print_results(evaluate_docs_average(docs, preds))
-
-
-if __name__ == "__main__":
-    main()

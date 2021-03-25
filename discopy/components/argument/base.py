@@ -142,9 +142,10 @@ def generate_pdtb_features(docs: List[Document]):
 
 
 class ExplicitArgumentExtractor(Component):
+    model_name = 'explicit_argument_extractor'
+    used_features = ['ptree']
 
     def __init__(self):
-        super().__init__(used_features=['ptree'])
         self.arg_pos_clf = ArgumentPositionClassifier()
         self.ss_model = Pipeline([
             ('vectorizer', DictVectorizer()),
@@ -284,6 +285,7 @@ class ExplicitArgumentExtractor(Component):
 
 
 class ImplicitArgumentExtractor(Component):
+    model_name = "implicit_argument_extractor"
 
     def load(self, path: str):
         pass

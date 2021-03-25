@@ -6,7 +6,6 @@ import numpy as np
 from discopy.data.doc import Document
 from discopy.data.relation import Relation
 from discopy.data.token import TokenSpan
-from discopy.data.relation import Relation
 
 logger = logging.getLogger('discopy')
 
