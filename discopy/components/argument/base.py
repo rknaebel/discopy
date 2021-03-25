@@ -14,9 +14,9 @@ from sklearn.pipeline import Pipeline
 
 from discopy.components.argument.position import ArgumentPositionClassifier
 from discopy.components.component import Component
-from discopy.data.doc import ParsedDocument
-from discopy.data.relation import Relation
+from discopy.data.doc import Document
 from discopy.data.loaders.conll import load_parsed_conll_dataset
+from discopy.data.relation import Relation
 from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
     get_clause_direction_path, lca, get_index_tree
 from discopy.features import get_root_path
@@ -117,7 +117,7 @@ def extract_ps_arguments(conn_head, indices, ptree, arg2):
     return feature_set
 
 
-def generate_pdtb_features(docs: List[ParsedDocument]):
+def generate_pdtb_features(docs: List[Document]):
     ss_features = []
     ps_features = []
     for doc in docs:
@@ -171,7 +171,7 @@ class ExplicitArgumentExtractor(Component):
         pickle.dump(self.ss_model, open(os.path.join(path, 'ss_extract_clf.p'), 'wb'))
         pickle.dump(self.ps_model, open(os.path.join(path, 'ps_extract_clf.p'), 'wb'))
 
-    def fit(self, docs_train: List[ParsedDocument], docs_val: List[ParsedDocument] = None):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         self.arg_pos_clf.fit(docs_train)
         (X_ss, y_ss), (X_ps, y_ps) = generate_pdtb_features(docs_train)
         self.ss_model.fit(X_ss, y_ss)
@@ -194,7 +194,7 @@ class ExplicitArgumentExtractor(Component):
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y_ps, y_pred_c)))
 
-    def score(self, docs: List[ParsedDocument]):
+    def score(self, docs: List[Document]):
         self.arg_pos_clf.score(docs)
         (x_ss, y_ss), (x_ps, y_ps) = generate_pdtb_features(docs)
         self.score_on_features(x_ss, y_ss, x_ps, y_ps)
@@ -252,7 +252,7 @@ class ExplicitArgumentExtractor(Component):
 
         return sorted(arg1), sorted(arg2), arg1_prob, arg2_prob
 
-    def parse(self, doc: ParsedDocument, relations: List[Relation] = None, **kwargs):
+    def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         if relations is None:
             raise ValueError('Component needs connectives already classified.')
         for relation in filter(lambda r: r.type == "Explicit", relations):
@@ -291,13 +291,13 @@ class ImplicitArgumentExtractor(Component):
     def save(self, path: str):
         pass
 
-    def fit(self, docs_train: List[ParsedDocument], docs_val: List[ParsedDocument] = None):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         pass
 
-    def score(self, docs: List[ParsedDocument]):
+    def score(self, docs: List[Document]):
         pass
 
-    def parse(self, doc: ParsedDocument, relations: List[Relation] = None, **kwargs):
+    def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         if relations is None:
             relations: List[Relation] = []
         inter_relations = set()

@@ -1,28 +1,26 @@
 from collections import namedtuple
 from typing import List, Optional
 
-import numpy as np
 import nltk
+import numpy as np
 
 from discopy.data.token import Token
 
+DepRel = namedtuple('DepRel', ['rel', 'head', 'dep'])
+
 
 class Sentence:
-    def __init__(self, tokens):
+    def __init__(self, tokens, dependencies=None, parsetree=None, embeddings=None):
         self.tokens: List[Token] = tokens
+        self.parsetree: str = parsetree or ""
+        self.dependencies: List[DepRel] = dependencies or []
+        self.__parsetree = None
+        self.embeddings: np.array = embeddings
 
     def get_text(self) -> str:
         return ''.join([self.tokens[0].surface] +
                        [('' if self.tokens[t_i].offset_end == t.offset_begin else ' ') + t.surface
                         for t_i, t in enumerate(self.tokens[1:])])
-
-
-class ParsedSentence(Sentence):
-    def __init__(self, tokens, dependencies=None, parsetree=None):
-        super().__init__(tokens)
-        self.parsetree: str = parsetree or ""
-        self.dependencies: List[DepRel] = dependencies or []
-        self.__parsetree = None
 
     def get_ptree(self) -> Optional[nltk.ParentedTree]:
         if not self.__parsetree:
@@ -38,6 +36,15 @@ class ParsedSentence(Sentence):
             self.__parsetree = ptree
         return self.__parsetree
 
+    def get_dtree(self) -> Optional[List[DepRel]]:
+        # TODO set this to default
+        return self.dependencies
+
+    def get_embeddings(self):
+        if self.embeddings is None:
+            raise ValueError("Embeddings not found.")
+        return self.embeddings
+
     def to_json(self) -> dict:
         return {
             'dependencies': [(
@@ -48,22 +55,3 @@ class ParsedSentence(Sentence):
             'parsetree': self.parsetree,
             'words': [t.to_json() for t in self.tokens]
         }
-
-
-class BertSentence(Sentence):
-    def __init__(self, tokens, embeddings: np.array):
-        super().__init__(tokens)
-        self.embeddings: np.array = embeddings
-
-    def get_embeddings(self):
-        return self.embeddings
-
-    def to_json(self) -> dict:
-        return {
-            'dependencies': [],
-            'parsetree': '',
-            'words': [t.to_json() for t in self.tokens]
-        }
-
-
-DepRel = namedtuple('DepRel', ['rel', 'head', 'dep'])

@@ -1,9 +1,6 @@
-import copy
 import logging
-from collections import defaultdict, Counter
 from typing import List
 
-import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
 #
@@ -108,91 +105,6 @@ def jaccard_distance(a, b):
     return 1 - jaccard_index(a, b)
 
 
-class Relation:
-    def __init__(self, arg1=None, arg2=None, conn=None, senses=None):
-        self.arg1 = set(arg1) if arg1 else set()
-        self.arg2 = set(arg2) if arg2 else set()
-        self.conn = set(conn) if conn else set()
-        self.senses = senses or []
-
-    def __eq__(self, other):
-        return (self.arg1 == other.arg1) and (self.arg2 == other.arg2) and (self.conn == other.conn)
-
-    def __and__(self, other):
-        r = Relation()
-        r.arg1 = self.arg1 & other.arg1
-        r.arg2 = self.arg2 & other.arg2
-        r.conn = self.conn & other.conn
-        return r
-
-    def __or__(self, other):
-        r = Relation()
-        r.conn = self.conn | other.conn
-        r.arg2 = (self.arg2 | other.arg2) - r.conn
-        r.arg1 = (self.arg1 | other.arg1) - (r.conn | r.arg2)
-        return r
-
-    def __bool__(self):
-        return bool(self.arg1) and bool(self.arg2)
-
-    def __str__(self):
-        return "Rel(arg1: <{}>, arg2: <{}>, conn: <{}>)".format(
-            ",".join(map(str, sorted(self.arg1))),
-            ",".join(map(str, sorted(self.arg2))),
-            ",".join(map(str, sorted(self.conn)))
-        )
-
-    def is_explicit(self):
-        return bool(self.conn)
-
-    def __repr__(self):
-        return "({},{},{})".format(list(self.arg1), list(self.arg2), list(self.conn))
-
-    def distance(self, other):
-        d_args = jaccard_distance(self.arg1 | self.arg2, other.arg1 | other.arg2)
-        d_arg1 = jaccard_distance(self.arg1, other.arg1)
-        d_conn = jaccard_distance(self.conn, other.conn)
-        d_arg2 = jaccard_distance(self.arg2, other.arg2)
-        return sum([d_args, d_arg1, d_arg2, d_conn]) / 4
-
-    @staticmethod
-    def from_conll(r):
-        conn = [(i[2] if type(i) == list else i) for i in r['Connective']['TokenList']]
-        arg1 = [(i[2] if type(i) == list else i) for i in r['Arg1']['TokenList']]
-        arg2 = [(i[2] if type(i) == list else i) for i in r['Arg2']['TokenList']]
-        senses = r['Sense']
-        return Relation(arg1, arg2, conn, senses)
-
-
-def convert_to_conll(document):
-    p = {
-        'DocID': document['DocID'],
-        'sentences': []
-    }
-    for sentence in document['sentences']:
-        if not sentence:
-            continue
-        p['sentences'].append({
-            'words': [(word, {
-                'CharacterOffsetBegin': sentence['SentenceOffset'] + offset,
-                'CharacterOffsetEnd': sentence['SentenceOffset'] + offset + len(word),
-                'Linkers': [],
-                'PartOfSpeech': pos,
-            }) for word, offset, pos in zip(sentence['Tokens'], sentence['Offset'], sentence['POS'])],
-            'parsetree': sentence['Parse'],
-            'dependencies': [(dep, "{}-{}".format(*node1), "{}-{}".format(*node2)) for (dep, node1, node2) in
-                             sentence['Dep']]
-        })
-    return p
-
-
-def load_relations(relations_json):
-    relations = defaultdict(list)
-    for r in relations_json:
-        relations[r['DocID']].append(Relation.from_conll(r))
-    return dict(relations)
-
-
 class ItemSelector(BaseEstimator, TransformerMixin):
     """For data grouped by feature, select subset of data at a provided key.
 
@@ -278,18 +190,6 @@ def init_logger(path='', log_level='INFO'):
     return logger
 
 
-def bootstrap_dataset(pdtb, parses, n_straps=3, ratio=0.7, replace=True):
-    n_samples = int(len(parses) * ratio)
-    doc_ids = list(parses.keys())
-    straps = []
-    for i in range(n_straps):
-        strap_doc_ids = set(np.random.choice(doc_ids, size=n_samples, replace=replace))
-        strap_pdtb = [r for r in pdtb if r['DocID'] in strap_doc_ids]
-        strap_parses = {doc_id: doc for doc_id, doc in parses.items() if doc_id in strap_doc_ids}
-        straps.append((strap_pdtb, strap_parses))
-    return straps
-
-
 def encode_iob(xs):
     res = []
     for i, label in enumerate(xs):
@@ -311,103 +211,3 @@ def decode_iob(xs: List[str]):
         else:
             res.append(label)
     return res
-
-
-class ParsedRelation:
-    class Span:
-        def __init__(self):
-            self.TokenList = []
-            self.RawText = ''
-
-        def get_sentence_ids(self):
-            return sorted(set(i[3] for i in self.TokenList))
-
-        def get_global_ids(self):
-            return sorted(set(i[2] for i in self.TokenList))
-
-        def get_local_ids(self):
-            return sorted(set(i[4] for i in self.TokenList))
-
-        def is_valid(self):
-            return len(self.TokenList) > 0
-
-        def __eq__(self, other):
-            return self.TokenList == other.TokenList
-
-        def overlaps(self, span):
-            return any(i in self.TokenList for i in span.TokenList)
-
-    def __eq__(self, other):
-        return (self.Arg1 == other.Arg1) and (self.Arg2 == other.Arg2) and (self.Connective == other.Connective)
-
-    def __init__(self):
-        self.Connective = ParsedRelation.Span()
-        self.Arg1 = ParsedRelation.Span()
-        self.Arg2 = ParsedRelation.Span()
-        self.ArgConfidence = 0
-        self.Type = ''
-        self.Sense = ''
-        self.ptree = None
-        self.doc_id = ''
-
-    def __hash__(self):
-        return hash(self.Connective.RawText + self.Arg1.RawText + self.Arg2.RawText)
-
-    def to_dict(self):
-        return {
-            'Connective': {
-                'TokenList': self.Connective.TokenList,
-                'RawText': self.Connective.RawText
-            },
-            'Arg1': {
-                'TokenList': self.Arg1.TokenList,
-                'RawText': self.Arg1.RawText,
-            },
-            'Arg2': {
-                'TokenList': self.Arg2.TokenList,
-                'RawText': self.Arg2.RawText,
-            },
-            'Confidence': {
-                'Arguments': self.ArgConfidence,
-            },
-            'Type': self.Type,
-            'Sense': [self.Sense],
-            'ptree': self.ptree,
-            'DocID': self.doc_id,
-            'ID': hash(self)
-        }
-
-    def is_valid(self):
-        return (self.Arg1.is_valid()
-                and self.Arg2.is_valid()
-                and not self.Arg1.overlaps(self.Connective)
-                and not self.Arg2.overlaps(self.Connective))
-
-    def to_conll(self):
-        r = self.to_dict()
-        del r['ptree']
-        return r
-
-    def is_explicit(self):
-        return self.Connective.RawText != ''
-
-    def __str__(self):
-        return "Relation({} {} arg1:<{}> arg2:<{}> conn:<{}>)".format(
-            self.Type, self.Sense,
-            ",".join(map(str, self.Arg1.get_global_ids())),
-            ",".join(map(str, self.Arg2.get_global_ids())),
-            ",".join(map(str, self.Connective.get_global_ids()))
-        )
-
-    @staticmethod
-    def from_dict(d):
-        r = ParsedRelation()
-        r.Sense = d['Sense'][0]
-        r.Type = d['Type']
-        r.Connective.TokenList = d['Connective']['TokenList']
-        r.Connective.RawText = d['Connective']['RawText']
-        r.Arg1.TokenList = d['Arg1']['TokenList']
-        r.Arg1.RawText = d['Arg1']['RawText']
-        r.Arg2.TokenList = d['Arg2']['TokenList']
-        r.Arg2.RawText = d['Arg2']['RawText']
-        return r

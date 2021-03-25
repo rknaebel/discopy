@@ -1,8 +1,10 @@
 import os
 from typing import List
 
-from discopy.data.doc import ParsedDocument
-from discopy.data.sentence import ParsedSentence, DepRel
+from discopy.components.nn.bert import get_sentence_embeddings
+from discopy.data.doc import Document
+from discopy.data.sentence import DepRel
+from transformers import AutoTokenizer, TFAutoModel
 
 
 def get_constituent_parse(constituent_parser, inputs):
@@ -34,7 +36,7 @@ def get_dependency_parse(dependency_parser, inputs, words):
     return dependencies
 
 
-def update_dataset_parses(docs: List[ParsedDocument], constituent_parser='crf-con-en',
+def update_dataset_parses(docs: List[Document], constituent_parser='crf-con-en',
                           dependency_parser='biaffine-dep-en'):
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
     import supar
@@ -45,7 +47,15 @@ def update_dataset_parses(docs: List[ParsedDocument], constituent_parser='crf-co
             inputs = [(t.surface, t.tag) for t in sent.tokens]
             parsetree = get_constituent_parse(cparser, inputs) if cparser else None
             dependencies = get_dependency_parse(dparser, inputs, sent.tokens) if dparser else None
-            doc.sentences[sent_i] = ParsedSentence(
-                tokens=sent.tokens,
-                dependencies=dependencies if dependency_parser else sent.dependencies,
-                parsetree=parsetree if constituent_parser else sent.parsetree)
+            doc.sentences[sent_i].dependencies = dependencies if dependency_parser else sent.dependencies
+            doc.sentences[sent_i].parsetree = parsetree if constituent_parser else sent.parsetree
+
+
+def update_dataset_embeddings(docs: List[Document], bert_model='bert-base-cased'):
+    tokenizer = AutoTokenizer.from_pretrained(bert_model)
+    model = TFAutoModel.from_pretrained(bert_model)
+    for doc in docs:
+        for sent_i, sent in enumerate(doc.sentences):
+            sent_words = sent.tokens
+            embeddings = get_sentence_embeddings(sent_words, tokenizer, model)
+            doc.sentences[sent_i].embeddings = embeddings

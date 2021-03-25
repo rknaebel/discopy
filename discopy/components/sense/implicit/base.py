@@ -13,7 +13,7 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support, coh
 from sklearn.pipeline import Pipeline, FeatureUnion
 
 from discopy.components.component import Component
-from discopy.data.doc import ParsedDocument
+from discopy.data.doc import Document
 from discopy.data.sentence import DepRel
 from discopy.data.relation import Relation
 from discopy.data.loaders.conll import load_parsed_conll_dataset
@@ -82,7 +82,7 @@ def get_features(ptrees_prev: List[nltk.ParentedTree], ptrees: List[nltk.Parente
     return features
 
 
-def generate_pdtb_features(docs: List[ParsedDocument]):
+def generate_pdtb_features(docs: List[Document]):
     features = []
     for doc in docs:
         for relation in filter(lambda r: r.type != "Explicit", doc.relations):
@@ -137,7 +137,7 @@ class NonExplicitSenseClassifier(Component):
     def save(self, path):
         pickle.dump(self.model, open(os.path.join(path, 'non_explicit_clf.p'), 'wb'))
 
-    def fit(self, docs_train: List[ParsedDocument], docs_val: List[ParsedDocument] = None):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         x, y = generate_pdtb_features(docs_train)
         self.model.fit(x, y)
 
@@ -150,7 +150,7 @@ class NonExplicitSenseClassifier(Component):
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred_c)))
 
-    def score(self, docs: List[ParsedDocument]):
+    def score(self, docs: List[Document]):
         logger.debug('Extract features')
         x, y = generate_pdtb_features(docs)
         self.score_on_features(x, y)
@@ -161,7 +161,7 @@ class NonExplicitSenseClassifier(Component):
         r_sense = self.model.classes_[probs.argmax()]
         return r_sense, probs.max()
 
-    def parse(self, doc: ParsedDocument, relations: List[Relation] = None, **kwargs):
+    def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         if relations is None:
             raise ValueError('Component needs implicit arguments extracted.')
         for relation in filter(lambda r: r.type != "Explicit", relations):

@@ -60,6 +60,9 @@ class Relation:
         r.arg1 = (self.arg1 | other.arg1) - (r.conn | r.arg2)
         return r
 
+    def is_empty(self):
+        return len(self.conn) == len(self.arg1) == len(self.arg2) == 0
+
     def distance(self, other):
         d_args = jaccard_distance(self.arg1 | self.arg2, other.arg1 | other.arg2)
         d_arg1 = jaccard_distance(self.arg1, other.arg1)

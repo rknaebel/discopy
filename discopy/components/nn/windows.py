@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from discopy.data.doc import BertDocument
+from discopy.data.doc import Document
 from discopy.data.relation import Relation
 from discopy.data.token import Token
 
@@ -28,7 +28,7 @@ def get_class_weights(y, smooth_factor=0.0):
 
 
 class PDTBWindowSequence(tf.keras.utils.Sequence):
-    def __init__(self, docs: List[BertDocument], window_length: int, sense_map, batch_size: int, nb_classes: int,
+    def __init__(self, docs: List[Document], window_length: int, sense_map, batch_size: int, nb_classes: int,
                  explicits_only: bool = False, positives_only: bool = False):
         self.rng = np.random.default_rng()
         self.docs = []
@@ -70,11 +70,11 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
         return get_class_weights(y, 0)
 
 
-def extract_document_training_windows(doc: BertDocument, sense_map, size=100, explicits_only: bool = False,
+def extract_document_training_windows(doc: Document, sense_map, size=100, explicits_only: bool = False,
                                       positives_only=False):
     """
     Args:
-        doc (BertDocument):
+        doc (Document):
         sense_map:
         size:
         explicits_only:
@@ -260,10 +260,10 @@ def reduce_relation_predictions(relations: List[Relation], max_distance: float =
             current = [next_rel]
 
     # filter invalid relations: either argument is empty
-    combined = [[r for r in rr if r.arg1 and r.arg2] for rr in combined]
+    combined = [[r for r in rels if not r.is_empty()] for rels in combined]
     # TODO whats the best number of partial relations to depend on?
     combined = [rr for rr in combined if len(rr) > 2]
     combined = [major_merge_relations(rr) for rr in combined]
-    combined = [r for r in combined if r.arg1 and r.arg2]
+    combined = [r for r in combined if not r.is_empty()]
 
     return combined

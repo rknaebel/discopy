@@ -9,10 +9,8 @@ import tensorflow as tf
 from sklearn.metrics import classification_report
 
 from discopy.components.component import Component
-from discopy.components.nn.windows import predict_discourse_windows_for_id, \
-    reduce_relation_predictions, extract_windows, PDTBWindowSequence
-from discopy.data.doc import BertDocument
-from discopy.data.loaders.conll import load_bert_conll_dataset
+from discopy.components.nn.windows import PDTBWindowSequence
+from discopy.data.doc import Document
 from discopy.data.relation import Relation
 from discopy.utils import init_logger
 
@@ -103,7 +101,7 @@ class AbstractArgumentExtractor(Component):
         self.model.save(os.path.join(path, self.fn))
         json.dump(self.sense_map, open(os.path.join(path, 'senses.json'), 'w'))
 
-    def fit(self, docs_train: List[BertDocument], docs_val: List[BertDocument] = None):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         self.sense_map = {v: k for k, v in enumerate(
             ['NoSense'] + sorted({s for doc in docs_train for rel in doc.relations for s in rel.senses}))}
         ds_train = PDTBWindowSequence(docs_train, self.window_length, self.sense_map, batch_size=self.batch_size,
@@ -145,7 +143,7 @@ class AbstractArgumentExtractor(Component):
             max_queue_size=10,
         )
 
-    def score(self, docs: List[BertDocument]):
+    def score(self, docs: List[Document]):
         ds = PDTBWindowSequence(docs, self.window_length, self.sense_map, batch_size=self.batch_size,
                                 nb_classes=self.nb_classes,
                                 explicits_only=self.explicits_only,
@@ -164,7 +162,7 @@ class AbstractArgumentExtractor(Component):
         for line in report.split('\n'):
             logger.info(line)
 
-    def parse(self, doc: BertDocument, relations: List[Relation] = None, **kwargs):
+    def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         raise NotImplementedError()
 
 

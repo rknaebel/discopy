@@ -1,14 +1,15 @@
 from typing import List
 
 import spacy
-from discopy.data.doc import ParsedDocument
-from discopy.data.sentence import ParsedSentence
+from discopy.data.doc import Document
+from discopy.data.relation import Relation
+from discopy.data.sentence import Sentence
 from discopy.data.token import Token
 from discopy.data.update import update_dataset_parses
 
 
-def load_texts(texts: List[str], simple_tags=False) -> List[ParsedDocument]:
-    nlp = spacy.load('en')
+def load_texts(texts: List[str], simple_tags=False, nlp=None) -> List[Document]:
+    nlp = nlp or spacy.load('en')
     docs = []
     for raw_text in texts:
         words = []

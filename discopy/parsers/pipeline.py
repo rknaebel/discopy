@@ -6,11 +6,7 @@ from tqdm import tqdm
 
 from discopy.components.argument.base import ExplicitArgumentExtractor, ImplicitArgumentExtractor
 from discopy.components.component import Component
-from discopy.components.connective.base import ConnectiveClassifier
-from discopy.components.sense.explicit.base import ExplicitSenseClassifier
-from discopy.components.sense.implicit.base import NonExplicitSenseClassifier
-from discopy.data.doc import ParsedDocument, BertDocument
-from discopy.data.loaders.conll import load_parsed_conll_dataset
+from discopy.data.doc import Document
 from discopy.data.relation import Relation
 from discopy.evaluate.conll import print_results, evaluate_docs, evaluate_docs_average
 from discopy.utils import init_logger
@@ -26,22 +22,22 @@ class ParserPipeline:
             else:
                 raise TypeError('Components should consist of Component instances only.')
 
-    def __call__(self, doc: Union[ParsedDocument, BertDocument]):
+    def __call__(self, doc: Document):
         relations: List[Relation] = []
         for c in self.components:
             relations = c.parse(doc, relations)
         return doc.with_relations(relations)
 
-    def parse(self, docs: List[Union[ParsedDocument, BertDocument]]):
+    def parse(self, docs: List[Document]):
         return [self(doc) for doc in tqdm(docs)]
 
-    def fit(self, docs_train: List[Union[ParsedDocument, BertDocument]],
-            docs_val: List[Union[ParsedDocument, BertDocument]] = None):
+    def fit(self, docs_train: List[Document],
+            docs_val: List[Document] = None):
         for c in self.components:
             print("train component:", c)
             c.fit(docs_train, docs_val)
 
-    def score(self, docs: List[Union[ParsedDocument, BertDocument]]):
+    def score(self, docs: List[Document]):
         for c in self.components:
             c.score(docs)
 

@@ -1,9 +1,10 @@
 import logging
-from typing import List, Union
+from typing import List
 
 import numpy as np
 
-from discopy.data.doc import ParsedDocument, BertDocument
+from discopy.data.doc import Document
+from discopy.data.relation import Relation
 from discopy.data.token import TokenSpan
 from discopy.data.relation import Relation
 
@@ -25,12 +26,11 @@ def print_results(results):
     logger.info('Sense:                        P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*results['sense']))
 
 
-def score_doc(gold_doc: Union[ParsedDocument, BertDocument], pred_doc: Union[ParsedDocument, BertDocument],
-              threshold=0.9):
+def score_doc(gold_doc: Document, pred_doc: Document, threshold=0.9):
     """
     Args:
-        gold_doc (ParsedDocument):
-        pred_doc (ParsedDocument):
+        gold_doc (Document):
+        pred_doc (Document):
         threshold:
     """
     gold_list = gold_doc.relations
@@ -47,8 +47,7 @@ def score_doc(gold_doc: Union[ParsedDocument, BertDocument], pred_doc: Union[Par
     }
 
 
-def evaluate_docs(gold_docs: List[Union[ParsedDocument, BertDocument]],
-                  pred_docs: List[Union[ParsedDocument, BertDocument]], threshold=0.9):
+def evaluate_docs(gold_docs: List[Document], pred_docs: List[Document], threshold=0.9):
     """
     Args:
         gold_docs:
@@ -78,8 +77,7 @@ def evaluate_docs(gold_docs: List[Union[ParsedDocument, BertDocument]],
     }
 
 
-def evaluate_docs_average(gold_docs: List[Union[ParsedDocument, BertDocument]],
-                          pred_docs: List[Union[ParsedDocument, BertDocument]], threshold=0.9):
+def evaluate_docs_average(gold_docs: List[Document], pred_docs: List[Document], threshold=0.9):
     """
     Args:
         gold_docs:

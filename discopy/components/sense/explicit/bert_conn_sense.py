@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from discopy.components.component import Component
 from discopy.components.connective.base import get_connective_candidates
-from discopy.data.doc import BertDocument
+from discopy.data.doc import Document
 from discopy.data.loaders.conll import load_bert_conll_dataset
 from discopy.data.relation import Relation
 from discopy.evaluate.conll import evaluate_docs, print_results
@@ -45,7 +45,7 @@ def get_bert_features(idxs, doc_bert, used_context=0):
     return embd
 
 
-def generate_pdtb_features(docs: List[BertDocument], sense_map: Dict[str, int], used_context=0):
+def generate_pdtb_features(docs: List[Document], sense_map: Dict[str, int], used_context=0):
     features = []
     for doc in tqdm(docs):
         doc_bert = doc.get_embeddings()
@@ -112,7 +112,7 @@ class ConnectiveSenseClassifier(Component):
         self.model.save(os.path.join(path, f'conn_sense_nn.model'))
         json.dump(self.sense_map, open(os.path.join(path, 'senses.json'), 'w'))
 
-    def fit(self, docs_train: List[BertDocument], docs_val: List[BertDocument] = None):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         if docs_val is None:
             raise ValueError("Validation data is missing.")
         self.sense_map, self.classes = get_sense_mapping(docs_train)
@@ -137,13 +137,13 @@ class ConnectiveSenseClassifier(Component):
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred)))
 
-    def score(self, docs: List[BertDocument]):
+    def score(self, docs: List[Document]):
         if not self.model:
             raise ValueError("Score of untrained model.")
         x, y = generate_pdtb_features(docs, self.sense_map, used_context=self.used_context)
         self.score_on_features(x, y)
 
-    def parse(self, doc: BertDocument, relations=None, **kwargs):
+    def parse(self, doc: Document, relations=None, **kwargs):
         if not self.model:
             raise ValueError("Score of untrained model.")
         relations: List[Relation] = []
