@@ -3,7 +3,6 @@ import logging
 import os
 from typing import List
 
-import click
 import numpy as np
 import tensorflow as tf
 from sklearn.metrics import classification_report
@@ -12,7 +11,6 @@ from discopy.components.component import Component
 from discopy.components.nn.windows import PDTBWindowSequence
 from discopy.data.doc import Document
 from discopy.data.relation import Relation
-from discopy.utils import init_logger
 
 logger = logging.getLogger('discopy')
 
@@ -56,14 +54,14 @@ class AbstractArgumentExtractor(Component):
                  positives_only=False, ckpt_path: str = ''):
         super().__init__()
         self.window_length = window_length
+        self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.rnn_dim = rnn_dim
         self.nb_classes = nb_classes
         self.explicits_only = explicits_only
         self.positives_only = positives_only
-        self.fn = fn
         self.checkpoint_path = ckpt_path
-        if not os.path.exists(ckpt_path):
+        if ckpt_path and not os.path.exists(ckpt_path):
             os.makedirs(ckpt_path)
         self.model = get_model(self.window_length, self.hidden_dim, self.rnn_dim, nb_classes, input_dim)
         self.compiled = False
@@ -78,6 +76,22 @@ class AbstractArgumentExtractor(Component):
         ]
         self.optimizer = tf.keras.optimizers.Adam(amsgrad=True)
 
+    def get_config(self):
+        return {
+            'model_name': self.model_name,
+            'input_dim': self.input_dim,
+            'window_length': self.window_length,
+            'hidden_dim': self.hidden_dim,
+            'rnn_dim': self.rnn_dim,
+            'nb_classes': self.nb_classes,
+            'explicits_only': self.explicits_only,
+            'positives_only': self.positives_only,
+            'checkpoint_path': self.checkpoint_path,
+            'sense_map': self.sense_map,
+            'epochs': self.epochs,
+            'batch_size': self.batch_size,
+        }
+
     def get_loss(self, class_weights):
         def loss(onehot_labels, logits):
             c_weights = np.array([class_weights[i] for i in range(self.nb_classes)])
@@ -91,14 +105,14 @@ class AbstractArgumentExtractor(Component):
 
     def load(self, path):
         self.sense_map = json.load(open(os.path.join(path, 'senses.json'), 'r'))
-        if not os.path.exists(os.path.join(path, self.fn)):
+        if not os.path.exists(os.path.join(path, self.model_name)):
             raise FileNotFoundError("Model not found.")
-        self.model = tf.keras.models.load_model(os.path.join(path, self.fn), compile=False)
+        self.model = tf.keras.models.load_model(os.path.join(path, self.model_name), compile=False)
 
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
-        self.model.save(os.path.join(path, self.fn))
+        self.model.save(os.path.join(path, self.model_name))
         json.dump(self.sense_map, open(os.path.join(path, 'senses.json'), 'w'))
 
     def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
@@ -131,7 +145,7 @@ class AbstractArgumentExtractor(Component):
         ]
         if self.checkpoint_path:
             self.callbacks.append(
-                tf.keras.callbacks.ModelCheckpoint(os.path.join(self.checkpoint_path, self.fn + '.ckp'),
+                tf.keras.callbacks.ModelCheckpoint(os.path.join(self.checkpoint_path, self.model_name + '.ckp'),
                                                    save_best_only=True,
                                                    save_weights_only=True))
             self.callbacks.append(tf.keras.callbacks.CSVLogger(os.path.join(self.checkpoint_path, 'logs.csv')))
@@ -153,7 +167,7 @@ class AbstractArgumentExtractor(Component):
         args = np.concatenate([args for windows, args in y], axis=0)
         y_pred = np.concatenate(self.model.predict(windows).argmax(-1))
         y = np.concatenate(args.argmax(-1))
-        logger.info("Evaluation: {}".format(self.fn))
+        logger.info("Evaluation: {}".format(self.model_name))
         report = classification_report(y, y_pred,
                                        output_dict=False,
                                        target_names=['None', 'Arg1', 'Arg2', 'Conn'], labels=range(4),
@@ -165,91 +179,18 @@ class AbstractArgumentExtractor(Component):
     def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         raise NotImplementedError()
 
-
-class ExplicitArgumentExtractor(AbstractArgumentExtractor):
-    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
-        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, fn='nea', explicits_only=True,
-                         positives_only=False)
-
-    def parse(self, doc: BertDocument, relations: List[Relation] = None,
-              batch_size=64, strides=1, max_distance=0.5, **kwargs):
-        offset = self.window_length // 2
-        doc_bert = doc.get_embeddings()
-        tokens = doc.get_tokens()
-        windows = extract_windows(doc_bert, self.window_length, strides, offset)
-        y_hat = self.model.predict(windows, batch_size=batch_size)
-        relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
-        relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
-        return relations_hat
-
-
-class FullArgumentExtractor(AbstractArgumentExtractor):
-    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
-        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, fn='naa', explicits_only=False,
-                         positives_only=False)
-
-    def parse(self, doc: BertDocument, relations: List[Relation] = None,
-              batch_size=64, strides=1, max_distance=0.5, **kwargs):
-        offset = self.window_length // 2
-        doc_bert = doc.get_embeddings()
-        tokens = doc.get_tokens()
-        windows = extract_windows(doc_bert, self.window_length, strides, offset)
-        y_hat = self.model.predict(windows, batch_size=batch_size)
-        relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
-        relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
-        return relations_hat
-
-
-class ConnectiveArgumentExtractor(AbstractArgumentExtractor):
-    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim, ckpt_path=''):
-        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, fn='nca', nb_classes=3, explicits_only=True,
-                         positives_only=True, ckpt_path=ckpt_path)
-
-    def parse(self, doc: BertDocument, relations: List[Relation] = None, **kwargs):
-        if not relations:
-            return []
-        offset = self.window_length // 2
-        doc_bert = doc.get_embeddings()
-        tokens = doc.get_tokens()
-        conn_pos = [min([i.idx for i in r.conn.tokens]) for r in relations]
-        word_windows = extract_windows(doc_bert, self.window_length, 1, offset)
-        y_hat = self.model.predict(word_windows, batch_size=256)
-        relations_hat = predict_discourse_windows_for_id(tokens, y_hat, 1, offset)
-        for i, pos in enumerate(conn_pos):
-            r = relations[i]
-            pred = relations_hat[pos]
-            r.arg1.tokens = [t for t in pred.arg1.tokens if t not in r.conn.tokens]
-            r.arg2.tokens = [t for t in pred.arg2.tokens if t not in r.conn.tokens]
-        return relations
-
-
-@click.command()
-@click.argument('bert-model', type=str)
-@click.argument('conll-path', type=str)
-def main(bert_model, conll_path):
-    logger = init_logger()
-    logger.info('Load dev data')
-    docs_val = load_bert_conll_dataset(os.path.join(conll_path, 'en.dev'),
-                                       simple_connectives=True,
-                                       cache_dir=os.path.join(conll_path, f'en.dev.{bert_model}.joblib'),
-                                       bert_model=bert_model)
-    logger.info('Init model')
-    # clf = ExplicitArgumentExtractor(window_length=150, input_dim=docs_val[0].embedding_dim, hidden_dim=64, rnn_dim=128)
-    clf = ConnectiveArgumentExtractor(window_length=100, input_dim=docs_val[0].embedding_dim, hidden_dim=256,
-                                      rnn_dim=512)
-    logger.info('Load train data')
-    docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'),
-                                         simple_connectives=True,
-                                         cache_dir=os.path.join(conll_path, f'en.train.{bert_model}.joblib'),
-                                         bert_model=bert_model)
-    logger.info('Train model')
-    clf.fit(docs_train, docs_val)
-    clf.save('models/nn')
-    logger.info('Evaluation on TEST')
-    clf.score(docs_val)
-    logger.info('Parse one document')
-    print(clf.parse(docs_val[0], docs_val[0].get_explicit_relations()))
-
-
-if __name__ == "__main__":
-    main()
+# class FullArgumentExtractor(AbstractArgumentExtractor):
+#     def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
+#         super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, fn='naa', explicits_only=False,
+#                          positives_only=False)
+#
+#     def parse(self, doc: BertDocument, relations: List[Relation] = None,
+#               batch_size=64, strides=1, max_distance=0.5, **kwargs):
+#         offset = self.window_length // 2
+#         doc_bert = doc.get_embeddings()
+#         tokens = doc.get_tokens()
+#         windows = extract_windows(doc_bert, self.window_length, strides, offset)
+#         y_hat = self.model.predict(windows, batch_size=batch_size)
+#         relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
+#         relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
+#         return relations_hat
