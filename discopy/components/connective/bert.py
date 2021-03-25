@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from discopy.components.component import Component
 from discopy.components.connective.base import get_connective_candidates
-from discopy.data.doc import BertDocument
+from discopy.data.doc import Document
 from discopy.data.loaders.conll import load_bert_conll_dataset
 from discopy.data.relation import Relation
 from discopy.evaluate.conll import evaluate_docs, print_results
@@ -46,7 +46,7 @@ def get_bert_features(idxs, doc_bert, used_context=0):
     return embd
 
 
-def generate_pdtb_features(docs: List[BertDocument], used_context=0):
+def generate_pdtb_features(docs: List[Document], used_context=0):
     features = []
     for doc in tqdm(docs):
         doc_bert = doc.get_embeddings()
@@ -81,7 +81,7 @@ class ConnectiveClassifier(Component):
             os.makedirs(path)
         self.model.save(os.path.join(path, f'connective_nn_{self.used_context}.model'))
 
-    def fit(self, docs_train: List[BertDocument], docs_val: List[BertDocument] = None):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         if docs_val is None:
             raise ValueError("Validation data is missing.")
         x_train, y_train = generate_pdtb_features(docs_train, used_context=self.used_context)
@@ -102,11 +102,11 @@ class ConnectiveClassifier(Component):
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred)))
 
-    def score(self, docs: List[BertDocument]):
+    def score(self, docs: List[Document]):
         x, y = generate_pdtb_features(docs, used_context=self.used_context)
         self.score_on_features(x, y)
 
-    def parse(self, doc: BertDocument, relations=None, **kwargs):
+    def parse(self, doc: Document, relations=None, **kwargs):
         relations: List[Relation] = []
         doc_bert = doc.get_embeddings()
         global_id_map = {(s_i, t.local_idx): t.idx for s_i, s in enumerate(doc.sentences) for t in s.tokens}

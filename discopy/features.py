@@ -128,7 +128,6 @@ def lca(ptree, leaf_index):
         raise Exception(e)
 
 
-
 def get_pos_features(ptree, leaf_index, head, position):
     pl = ptree.pos()
     other_position = leaf_index[0] + position

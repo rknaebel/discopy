@@ -1,7 +1,7 @@
 from typing import List, Union
 
-from discopy.data.doc import ParsedDocument, BertDocument
-from discopy.data.relation import Relation
+import discopy.data.doc as ddoc
+import discopy.data.relation as drelation
 
 
 class Component:
@@ -15,14 +15,15 @@ class Component:
     def save(self, path: str):
         raise NotImplementedError()
 
-    def fit(self, docs_train: List[Union[ParsedDocument, BertDocument]],
-            docs_val: List[Union[ParsedDocument, BertDocument]] = None):
+    def fit(self, docs_train: List[ddoc.Document],
+            docs_val: List[ddoc.Document] = None):
         raise NotImplementedError()
 
-    def score(self, docs: List[Union[ParsedDocument, BertDocument]]):
+    def score(self, docs: List[ddoc.Document]):
         raise NotImplementedError()
 
-    def parse(self, doc: Union[ParsedDocument, BertDocument], relations: List[Relation] = None, **kwargs):
+    def parse(self, doc: ddoc.Document,
+              relations: List[drelation.Relation] = None, **kwargs):
         raise NotImplementedError()
 
     def get_used_features(self) -> List[str]:
@@ -36,8 +37,8 @@ class SubComponent:
     def save(self, path: str):
         raise NotImplementedError()
 
-    def fit(self, docs: List[Union[ParsedDocument, BertDocument]]):
+    def fit(self, docs: List[ddoc.Document]):
         raise NotImplementedError()
 
-    def score(self, docs: List[Union[ParsedDocument, BertDocument]]):
+    def score(self, docs: List[ddoc.Document]):
         raise NotImplementedError()

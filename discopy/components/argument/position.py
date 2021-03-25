@@ -12,7 +12,7 @@ from sklearn.metrics import precision_recall_fscore_support, accuracy_score, coh
 from sklearn.pipeline import Pipeline
 
 from discopy.components.component import SubComponent
-from discopy.data.doc import ParsedDocument
+from discopy.data.doc import Document
 from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.features import get_connective_sentence_position, lca, get_pos_features
 from discopy.utils import init_logger
@@ -42,7 +42,7 @@ def get_features(ptree: nltk.ParentedTree, conn: str, leaf_index: list):
     return feat
 
 
-def generate_pdtb_features(docs: List[ParsedDocument]):
+def generate_pdtb_features(docs: List[Document]):
     features = []
     for doc in docs:
         for relation in doc.relations:
@@ -84,7 +84,7 @@ class ArgumentPositionClassifier(SubComponent):
     def save(self, path: str):
         pickle.dump(self.model, open(os.path.join(path, 'position_clf.p'), 'wb'))
 
-    def fit(self, docs: List[ParsedDocument]):
+    def fit(self, docs: List[Document]):
         X, y = generate_pdtb_features(docs)
         self.model.fit(X, y)
 
@@ -97,7 +97,7 @@ class ArgumentPositionClassifier(SubComponent):
         logger.info("    Macro: P {:<06.4} R {:<06.4} F1 {:<06.4}".format(prec, recall, f1))
         logger.info("    Kappa: {:<06.4}".format(cohen_kappa_score(y, y_pred_c)))
 
-    def score(self, docs: List[ParsedDocument]):
+    def score(self, docs: List[Document]):
         X, y = generate_pdtb_features(docs)
         self.score_on_features(X, y)
 

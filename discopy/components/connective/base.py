@@ -12,7 +12,7 @@ from sklearn.metrics import cohen_kappa_score, precision_recall_fscore_support, 
 from sklearn.pipeline import Pipeline
 
 from discopy.components.component import Component
-from discopy.data.doc import ParsedDocument
+from discopy.data.doc import Document
 from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.data.relation import Relation
 from discopy.data.sentence import Sentence
@@ -86,7 +86,7 @@ def get_features(ptree: nltk.ParentedTree, conn_idxs):
     return feat
 
 
-def generate_pdtb_features(docs: List[ParsedDocument]):
+def generate_pdtb_features(docs: List[Document]):
     features = []
     for doc in docs:
         for sent_i, sentence in enumerate(doc.sentences):
@@ -123,7 +123,7 @@ class ConnectiveClassifier(Component):
             os.makedirs(path)
         pickle.dump(self.model, open(os.path.join(path, 'connective_clf.p'), 'wb'))
 
-    def fit(self, docs_train: List[ParsedDocument], docs_val: List[ParsedDocument] = None):
+    def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         x, y = generate_pdtb_features(docs_train)
         self.model.fit(x, y)
 
@@ -140,7 +140,7 @@ class ConnectiveClassifier(Component):
         x, y = generate_pdtb_features(docs)
         self.score_on_features(x, y)
 
-    def parse(self, doc: ParsedDocument, relations=None, **kwargs):
+    def parse(self, doc: Document, relations=None, **kwargs):
         relations: List[Relation] = []
         for sent_id, sent in enumerate(doc.sentences):
             ptree = sent.get_ptree()

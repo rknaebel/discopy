@@ -10,9 +10,9 @@ from transformers import AutoTokenizer, AutoModel
 
 from discopy.components.nn.bert import get_sentence_embeddings, simple_map
 from discopy.conn_head_mapper import ConnHeadMapper
-from discopy.data.doc import ParsedDocument, BertDocument
+from discopy.data.doc import Document
 from discopy.data.relation import Relation
-from discopy.data.sentence import ParsedSentence, DepRel, BertSentence
+from discopy.data.sentence import DepRel, Sentence
 from discopy.data.token import Token
 
 
@@ -23,7 +23,7 @@ def convert_sense(s, lvl):
         return s
 
 
-def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List[ParsedDocument]:
+def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List[Document]:
     parses_path = os.path.join(conll_path, 'parses.json')
     relations_path = os.path.join(conll_path, 'relations.json')
     docs = []
@@ -49,7 +49,7 @@ def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List
                        dep=words[int(dep.split('-')[-1]) - 1]
                        ) for rel, head, dep in sent['dependencies']
             ]
-            sents.append(ParsedSentence(sent_words, dependencies=dependencies, parsetree=sent['parsetree']))
+            sents.append(Sentence(sent_words, dependencies=dependencies, parsetree=sent['parsetree']))
         doc_pdtb = pdtb.get(doc_id, [])
         if simple_connectives:
             connective_head(doc_pdtb)
@@ -59,12 +59,12 @@ def load_parsed_conll_dataset(conll_path: str, simple_connectives=False) -> List
                      [words[i[2]] for i in rel['Connective']['TokenList']],
                      rel['Sense'], rel['Type']) for rel in doc_pdtb
         ]
-        docs.append(ParsedDocument(doc_id=doc_id, sentences=sents, relations=relations))
+        docs.append(Document(doc_id=doc_id, sentences=sents, relations=relations))
     return docs
 
 
 def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, cache_dir='',
-                            bert_model='bert-base-cased', sense_level=-1) -> List[BertDocument]:
+                            bert_model='bert-base-cased', sense_level=-1) -> List[Document]:
     if cache_dir and os.path.exists(cache_dir):
         doc_embeddings = joblib.load(cache_dir)
         tokenizer = None
@@ -99,7 +99,7 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, 
                 embeddings = doc_embeddings[doc_id][token_offset:token_offset + len(sent_words)]
             else:
                 embeddings = get_sentence_embeddings(sent_words, tokenizer, model)
-            sents.append(BertSentence(sent_words, embeddings))
+            sents.append(Sentence(sent_words, embeddings=embeddings))
             token_offset += len(sent_words)
         doc_pdtb = pdtb.get(doc_id, [])
         if simple_connectives:
@@ -110,7 +110,7 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, 
                      [words[i[2]] for i in rel['Connective']['TokenList']],
                      [convert_sense(s, sense_level) for s in rel['Sense']], rel['Type']) for rel in doc_pdtb
         ]
-        doc = BertDocument(doc_id=doc_id, sentences=sents, relations=relations, embedding_dim=embeddings.shape[-1])
+        doc = Document(doc_id=doc_id, sentences=sents, relations=relations)
         if cache_dir and not preloaded:
             doc_embeddings[doc.doc_id] = doc.get_embeddings()
         docs.append(doc)
@@ -120,7 +120,7 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, 
 
 
 def load_embeddings_conll_dataset(conll_path: str, embedder: 'TokenSentenceEmbedder', simple_connectives=False, limit=0,
-                                  ) -> List[BertDocument]:
+                                  ) -> List[Document]:
     parses_path = os.path.join(conll_path, 'parses.json')
     relations_path = os.path.join(conll_path, 'relations.json')
     docs = []
@@ -142,7 +142,7 @@ def load_embeddings_conll_dataset(conll_path: str, embedder: 'TokenSentenceEmbed
             ]
             words.extend(sent_words)
             embeddings = embedder.get_sentence_vector_embeddings(sent_words)
-            sents.append(BertSentence(sent_words, embeddings))
+            sents.append(Sentence(sent_words, embeddings=embeddings))
             token_offset += len(sent_words)
         doc_pdtb = pdtb.get(doc_id, [])
         if simple_connectives:
@@ -153,7 +153,7 @@ def load_embeddings_conll_dataset(conll_path: str, embedder: 'TokenSentenceEmbed
                      [words[i[2]] for i in rel['Connective']['TokenList']],
                      rel['Sense'], rel['Type']) for rel in doc_pdtb
         ]
-        doc = BertDocument(doc_id=doc_id, sentences=sents, relations=relations, embedding_dim=embedder.embedding_dim)
+        doc = Document(doc_id=doc_id, sentences=sents, relations=relations)
         docs.append(doc)
     return docs
 
