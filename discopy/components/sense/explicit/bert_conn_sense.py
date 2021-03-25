@@ -86,13 +86,31 @@ def get_sense_mapping(docs):
 
 
 class ConnectiveSenseClassifier(Component):
+    model_name = 'explicit_sense_bert_classifier'
+    used_features = ['vectors']
+
     def __init__(self, input_dim, used_context: int = 0):
-        super().__init__(used_features=['vectors'])
+        self.input_dim = input_dim
+        self.used_context = used_context
         self.in_size = input_dim + 2 * used_context * input_dim
         self.sense_map = {}
         self.classes = []
         self.model = None
-        self.used_context = used_context
+
+    def get_config(self):
+        return {
+            'model_name': self.model_name,
+            'input_dim': self.input_dim,
+            'used_context': self.used_context,
+            'sense_map': self.sense_map,
+            'classes': self.classes,
+        }
+
+    @staticmethod
+    def from_config(config: dict):
+        clf = ConnectiveSenseClassifier(config['input_dim'], config['used_context'])
+        clf.sense_map = config['sense_map']
+        clf.classes = config['classes']
 
     def load(self, path):
         self.sense_map = json.load(open(os.path.join(path, 'senses.json'), 'r'))
@@ -124,7 +142,7 @@ class ConnectiveSenseClassifier(Component):
         self.model.fit(x_train, y_train, validation_data=(x_val, y_val), verbose=1, shuffle=True, epochs=10,
                        batch_size=256,
                        callbacks=[
-                           tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0.001, patience=10, verbose=0,
+                           tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0.001, patience=3, verbose=0,
                                                             restore_best_weights=True),
                            tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=4, verbose=0)
                        ])
@@ -172,7 +190,7 @@ def main(conll_path):
                                        cache_dir=os.path.join(conll_path, 'en.dev.bert-base-cased.joblib'))
     docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'),
                                          cache_dir=os.path.join(conll_path, 'en.train.bert-base-cased.joblib'))
-    clf = ConnectiveSenseClassifier(input_dim=docs_val[0].embedding_dim, used_context=2)
+    clf = ConnectiveSenseClassifier(input_dim=docs_val[0].get_embedding_dim(), used_context=2)
     logger.info('Train model')
     clf.fit(docs_train, docs_val)
     logger.info('Evaluation on TRAIN')

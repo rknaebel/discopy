@@ -6,7 +6,7 @@ from typing import List
 import joblib
 import numpy as np
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, TFAutoModel
 
 from discopy.components.nn.bert import get_sentence_embeddings, simple_map
 from discopy.conn_head_mapper import ConnHeadMapper
@@ -73,7 +73,7 @@ def load_bert_conll_dataset(conll_path: str, simple_connectives=False, limit=0, 
     else:
         doc_embeddings = {}
         tokenizer = AutoTokenizer.from_pretrained(bert_model)
-        model = AutoModel.from_pretrained(bert_model)
+        model = TFAutoModel.from_pretrained(bert_model)
         preloaded = False
     parses_path = os.path.join(conll_path, 'parses.json')
     relations_path = os.path.join(conll_path, 'relations.json')

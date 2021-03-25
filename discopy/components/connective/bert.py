@@ -64,8 +64,10 @@ def generate_pdtb_features(docs: List[Document], used_context=0):
 
 
 class ConnectiveClassifier(Component):
+    model_name = 'connective_bert_classifier'
+    used_features = ['vectors']
+
     def __init__(self, input_dim, used_context: int = 0):
-        super().__init__(used_features=['vectors'])
         in_size = input_dim + 2 * used_context * input_dim
         self.model = get_conn_model(in_size, 1, 1024)
         self.used_context = used_context
@@ -130,7 +132,7 @@ def main(conll_path):
     logger = init_logger()
     docs_val = load_bert_conll_dataset(os.path.join(conll_path, 'en.dev'),
                                        cache_dir=os.path.join(conll_path, 'en.dev.bert-base-cased.joblib'))
-    clf = ConnectiveClassifier(input_dim=docs_val[0].embedding_dim)
+    clf = ConnectiveClassifier(input_dim=docs_val[0].get_embedding_dim())
     try:
         clf.load('models/nn')
     except FileNotFoundError:

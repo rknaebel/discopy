@@ -111,20 +111,21 @@ def generate_pdtb_features(docs: List[Document], window_side_size=2):
 
 
 class GoshArgumentExtractor(Component):
+    model_name = 'gosh_arg_extract'
+    used_features = ['ptree', 'dtree']
+
     def __init__(self, window_side_size=2):
-        super().__init__(used_features=['ptree', 'dtree'])
-        self.id = 'gosh_arg_extract'
         self.window_side_size = window_side_size
         self.arg1_model = CRF(algorithm='l2sgd', verbose=True, min_freq=5)
         self.arg2_model = CRF(algorithm='l2sgd', verbose=True, min_freq=5)
 
     def load(self, path):
-        self.arg1_model = pickle.load(open(os.path.join(path, "{}.arg1.p".format(self.id)), 'rb'))
-        self.arg2_model = pickle.load(open(os.path.join(path, "{}.arg2.p".format(self.id)), 'rb'))
+        self.arg1_model = pickle.load(open(os.path.join(path, "{}.arg1.p".format(self.model_name)), 'rb'))
+        self.arg2_model = pickle.load(open(os.path.join(path, "{}.arg2.p".format(self.model_name)), 'rb'))
 
     def save(self, path):
-        pickle.dump(self.arg1_model, open(os.path.join(path, "{}.arg1.p".format(self.id)), 'wb'))
-        pickle.dump(self.arg2_model, open(os.path.join(path, "{}.arg2.p".format(self.id)), 'wb'))
+        pickle.dump(self.arg1_model, open(os.path.join(path, "{}.arg1.p".format(self.model_name)), 'wb'))
+        pickle.dump(self.arg2_model, open(os.path.join(path, "{}.arg2.p".format(self.model_name)), 'wb'))
 
     def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         (x_arg1, y_arg1), (x_arg2, y_arg2) = generate_pdtb_features(docs_train, self.window_side_size)

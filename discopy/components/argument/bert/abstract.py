@@ -50,11 +50,11 @@ def get_model(max_seq_len, hidden_dim, rnn_dim, nb_classes, input_size):
 
 
 class AbstractArgumentExtractor(Component):
+    used_features = ['vectors']
 
     def __init__(self, window_length, input_dim, hidden_dim, rnn_dim, nb_classes, explicits_only=False,
-                 positives_only=False,
-                 fn: str = '', ckpt_path: str = ''):
-        super().__init__(used_features=['vectors'])
+                 positives_only=False, ckpt_path: str = ''):
+        super().__init__()
         self.window_length = window_length
         self.hidden_dim = hidden_dim
         self.rnn_dim = rnn_dim

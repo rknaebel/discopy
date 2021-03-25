@@ -73,22 +73,23 @@ def generate_pdtb_features(docs: List[Document]):
 
 
 class CRFArgumentExtractor(Component):
+    model_name = "crf_arg_extract"
+    used_features = ['ptree']
+
     def __init__(self):
-        super().__init__(used_features=['ptree'])
-        self.id = "crf_arg_extract"
         self.arg_pos_clf = ArgumentPositionClassifier()
         self.ss_model = CRF(algorithm='lbfgs', c1=0.1, c2=0.1, max_iterations=100, all_possible_transitions=True)
         self.ps_model = CRF(algorithm='lbfgs', c1=0.1, c2=0.1, max_iterations=100, all_possible_transitions=True)
 
     def load(self, path):
         self.arg_pos_clf.load(path)
-        self.ss_model = pickle.load(open(os.path.join(path, "{}.ss.p".format(self.id)), 'rb'))
-        self.ps_model = pickle.load(open(os.path.join(path, "{}.ps.p".format(self.id)), 'rb'))
+        self.ss_model = pickle.load(open(os.path.join(path, "{}.ss.p".format(self.model_name)), 'rb'))
+        self.ps_model = pickle.load(open(os.path.join(path, "{}.ps.p".format(self.model_name)), 'rb'))
 
     def save(self, path):
         self.arg_pos_clf.save(path)
-        pickle.dump(self.ss_model, open(os.path.join(path, "{}.ss.p".format(self.id)), 'wb'))
-        pickle.dump(self.ps_model, open(os.path.join(path, "{}.ps.p".format(self.id)), 'wb'))
+        pickle.dump(self.ss_model, open(os.path.join(path, "{}.ss.p".format(self.model_name)), 'wb'))
+        pickle.dump(self.ps_model, open(os.path.join(path, "{}.ps.p".format(self.model_name)), 'wb'))
 
     def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         self.arg_pos_clf.fit(docs_train)

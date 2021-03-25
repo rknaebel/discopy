@@ -1,13 +1,21 @@
-from typing import List, Union
+from typing import List
 
 import discopy.data.doc as ddoc
 import discopy.data.relation as drelation
 
 
 class Component:
+    model_name = ""
+    used_features = []
 
-    def __init__(self, used_features: List[str] = None):
-        self.used_features = used_features or []
+    def get_config(self):
+        return {
+            'model_name': self.model_name,
+        }
+
+    @staticmethod
+    def from_config(config: dict):
+        raise NotImplementedError()
 
     def load(self, path: str):
         raise NotImplementedError()
