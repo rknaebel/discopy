@@ -22,9 +22,7 @@ setup(name='discopy-rknaebel',
           'sklearn-crfsuite',
           'ujson>=2.0.0',
           'tensorflow>=2.1.0'
-          'torch>=1.4.0'
           'spacy>=2.3.5',
-          'supar>=1.0.0',
           'transformers>=3.5.0'
       ],
       zip_safe=False,
