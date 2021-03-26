@@ -1,14 +1,13 @@
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
+from discopy.data.update import update_dataset_parses
 
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import click
 # TODO run on gpu raises error: supar sequence length datatype problem
 from discopy.data.loaders.raw import load_texts
 from discopy.parsers.utils import get_parser
 from discopy.utils import init_logger
-
-logger = init_logger()
 
 
 @click.command()
@@ -17,13 +16,15 @@ logger = init_logger()
 @click.option('-i', '--src', default='-', type=click.File('r'))
 @click.option('-o', '--tgt', default='-', type=click.File('w'))
 def main(parser, model_path, src, tgt):
+    logger = init_logger()
     logger.info('Init Parser...')
     parser = get_parser(parser)
     logger.info('Load pre-trained Parser...')
     parser.load(model_path)
-    parsed_text = load_texts([src.read()])[0]
-    doc = parser(parsed_text)
-    tgt.write(doc.to_json())
+    docs = load_texts([src.read()])
+    update_dataset_parses(docs)
+    doc = parser(docs[0])
+    tgt.write(str(doc))
 
 
 if __name__ == '__main__':
