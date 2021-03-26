@@ -22,6 +22,7 @@ def clean_text(s):
 @click.option('-l', '--limit', default=0, type=int)
 def main(src, tgt, limit):
     nlp = spacy.load('en')
+    doc_i = 0
     with zipfile.ZipFile(src, 'r') as zh:
         with zh.open(zh.filelist[0].filename, 'r') as fh:
             for row_i, row in tqdm(enumerate(fh.read().decode().splitlines())):
@@ -32,11 +33,11 @@ def main(src, tgt, limit):
                 doc = json.loads(row)
                 contents = re.sub(WS, ' ', doc['contents'])
                 parses = load_texts(texts=[contents], nlp=nlp)[0]
-                if len(parses.sentences) == 0:
+                if len(parses.sentences) <= 2:
                     continue
                 parses = parses.to_json()
                 doc = {
-                    'docID': f"press-gov_{row_i:05}",
+                    'docID': f"press-gov_{doc_i:05}",
                     'meta': {
                         'title': re.sub(WS, ' ', doc['title']),
                         'corpus': 'press-gov',
@@ -48,6 +49,7 @@ def main(src, tgt, limit):
                     'sentences': parses['sentences'],
                 }
                 tgt.write(json.dumps(doc) + '\n')
+                doc_i += 1
 
 
 if __name__ == '__main__':
