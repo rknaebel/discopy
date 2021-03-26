@@ -179,7 +179,10 @@ def main(src, tgt):
             entry = bib_extract(' '.join(content))
             if entry and not any(c in entry['text'] for c in '\\{}'):
                 entry['docID'] = f'anthology_{doc_i:06}'
-                parses = load_texts(texts=[entry['text']], nlp=nlp)[0].to_json()
+                parses = load_texts(texts=[entry['text']], nlp=nlp)[0]
+                if len(parses.sentences) <= 2:
+                    continue
+                parses = parses.to_json()
                 entry['text'] = parses['text']
                 entry['sentences'] = parses['sentences']
                 tgt.write(json.dumps(entry) + '\n')
