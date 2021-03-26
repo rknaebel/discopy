@@ -1,10 +1,8 @@
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = os.environ.get('CUDA_VISIBLE_DEVICES', '')
-
 import click
 
-from discopy.data.loaders.conll import load_conll_dataset
+from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.evaluate.conll import evaluate_docs, print_results
 from discopy.parsers.utils import get_parser
 from discopy.utils import init_logger
@@ -18,8 +16,8 @@ logger = init_logger()
 @click.argument('conll-path', type=str)
 @click.option('-t', '--threshold', default=0.9, type=str)
 def main(parser, model_path, conll_path, threshold):
-    docs_test = load_conll_dataset(os.path.join(conll_path, 'en.test'), simple_connectives=True)
-    docs_blind = load_conll_dataset(os.path.join(conll_path, 'en.blind-test'), simple_connectives=True)
+    docs_test = load_parsed_conll_dataset(os.path.join(conll_path, 'en.test'), simple_connectives=True)
+    docs_blind = load_parsed_conll_dataset(os.path.join(conll_path, 'en.blind-test'), simple_connectives=True)
     logger.info('Init Parser...')
     parser = get_parser(parser)
     logger.info('Load pre-trained Parser...')
@@ -27,7 +25,7 @@ def main(parser, model_path, conll_path, threshold):
     logger.info('component evaluation (test)')
     parser.score(docs_test)
     logger.info('extract discourse relations from test data')
-    preds = [parser(d) for d in docs_test]
+    preds = parser.parse(docs_test)
     print_results(evaluate_docs(docs_test, preds, threshold=threshold))
     logger.info('extract discourse relations from BLIND data')
     preds = [parser(d) for d in docs_blind]
