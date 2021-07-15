@@ -2,7 +2,7 @@ from typing import List
 
 import numpy as np
 
-from discopy.data.token import Token
+from discopy_data.data.token import Token
 
 simple_map = {
     "''": '"',

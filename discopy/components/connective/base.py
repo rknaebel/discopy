@@ -12,13 +12,13 @@ from sklearn.metrics import cohen_kappa_score, precision_recall_fscore_support, 
 from sklearn.pipeline import Pipeline
 
 from discopy.components.component import Component
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_parsed_conll_dataset
-from discopy.data.relation import Relation
-from discopy.data.sentence import Sentence
 from discopy.features import get_compressed_chain, get_pos_features, get_sibling_label
 from discopy.utils import single_connectives, multi_connectives_first, multi_connectives, distant_connectives, \
     init_logger
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_parsed_conll_dataset
+from discopy_data.data.relation import Relation
+from discopy_data.data.sentence import Sentence
 
 logger = logging.getLogger('discopy')
 

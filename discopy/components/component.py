@@ -1,7 +1,7 @@
 from typing import List
 
-import discopy.data.doc as ddoc
-import discopy.data.relation as drelation
+from discopy_data.data.doc import Document
+from discopy_data.data.relation import Relation
 
 
 class Component:
@@ -23,15 +23,15 @@ class Component:
     def save(self, path: str):
         raise NotImplementedError()
 
-    def fit(self, docs_train: List[ddoc.Document],
-            docs_val: List[ddoc.Document] = None):
+    def fit(self, docs_train: List[Document],
+            docs_val: List[Document] = None):
         raise NotImplementedError()
 
-    def score(self, docs: List[ddoc.Document]):
+    def score(self, docs: List[Document]):
         raise NotImplementedError()
 
-    def parse(self, doc: ddoc.Document,
-              relations: List[drelation.Relation] = None, **kwargs):
+    def parse(self, doc: Document,
+              relations: List[Relation] = None, **kwargs):
         raise NotImplementedError()
 
     def get_used_features(self) -> List[str]:
@@ -45,8 +45,8 @@ class SubComponent:
     def save(self, path: str):
         raise NotImplementedError()
 
-    def fit(self, docs: List[ddoc.Document]):
+    def fit(self, docs: List[Document]):
         raise NotImplementedError()
 
-    def score(self, docs: List[ddoc.Document]):
+    def score(self, docs: List[Document]):
         raise NotImplementedError()

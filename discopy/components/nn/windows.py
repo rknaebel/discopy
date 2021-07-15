@@ -6,9 +6,9 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from discopy.data.doc import Document
-from discopy.data.relation import Relation
-from discopy.data.token import Token
+from discopy_data.data.doc import Document
+from discopy_data.data.relation import Relation
+from discopy_data.data.token import Token
 
 
 def get_class_weights(y, smooth_factor=0.0):

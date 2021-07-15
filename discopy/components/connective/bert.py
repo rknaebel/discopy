@@ -10,11 +10,11 @@ from tqdm import tqdm
 
 from discopy.components.component import Component
 from discopy.components.connective.base import get_connective_candidates
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_bert_conll_dataset
-from discopy.data.relation import Relation
 from discopy.evaluate.conll import evaluate_docs, print_results
 from discopy.utils import init_logger
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_bert_conll_dataset
+from discopy_data.data.relation import Relation
 
 logger = logging.getLogger('discopy')
 
