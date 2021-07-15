@@ -13,11 +13,11 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support, coh
 from sklearn.pipeline import Pipeline, FeatureUnion
 
 from discopy.components.component import Component
-from discopy.data.doc import Document
-from discopy.data.sentence import DepRel
-from discopy.data.relation import Relation
-from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.utils import ItemSelector, init_logger
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_parsed_conll_dataset
+from discopy_data.data.relation import Relation
+from discopy_data.data.sentence import DepRel
 
 logger = logging.getLogger('discopy')
 

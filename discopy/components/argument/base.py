@@ -14,14 +14,14 @@ from sklearn.pipeline import Pipeline
 
 from discopy.components.argument.position import ArgumentPositionClassifier
 from discopy.components.component import Component
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_parsed_conll_dataset
-from discopy.data.relation import Relation
 from discopy.features import get_clause_context, get_connective_category, get_relative_position, \
     get_clause_direction_path, lca, get_index_tree
 from discopy.features import get_root_path
 from discopy.features import get_sibling_counts, get_clauses
 from discopy.utils import init_logger
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_parsed_conll_dataset
+from discopy_data.data.relation import Relation
 
 logger = logging.getLogger('discopy')
 

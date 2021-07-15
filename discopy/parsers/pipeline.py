@@ -5,8 +5,8 @@ from typing import List
 from tqdm import tqdm
 
 from discopy.components.component import Component
-from discopy.data.doc import Document
-from discopy.data.relation import Relation
+from discopy_data.data.doc import Document
+from discopy_data.data.relation import Relation
 
 
 class ParserPipeline:

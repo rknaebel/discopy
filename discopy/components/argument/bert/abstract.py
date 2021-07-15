@@ -9,8 +9,8 @@ from sklearn.metrics import classification_report
 
 from discopy.components.component import Component
 from discopy.components.nn.windows import PDTBWindowSequence
-from discopy.data.doc import Document
-from discopy.data.relation import Relation
+from discopy_data.data.doc import Document
+from discopy_data.data.relation import Relation
 
 logger = logging.getLogger('discopy')
 
@@ -92,6 +92,10 @@ class AbstractArgumentExtractor(Component):
             'batch_size': self.batch_size,
         }
 
+    @staticmethod
+    def from_config(config: dict):
+        raise NotImplementedError()
+
     def get_loss(self, class_weights):
         def loss(onehot_labels, logits):
             c_weights = np.array([class_weights[i] for i in range(self.nb_classes)])
@@ -104,16 +108,16 @@ class AbstractArgumentExtractor(Component):
         return loss
 
     def load(self, path):
-        self.sense_map = json.load(open(os.path.join(path, 'senses.json'), 'r'))
         if not os.path.exists(os.path.join(path, self.model_name)):
             raise FileNotFoundError("Model not found.")
+        self.sense_map = json.load(open(os.path.join(path, self.model_name, 'senses.json'), 'r'))
         self.model = tf.keras.models.load_model(os.path.join(path, self.model_name), compile=False)
 
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
         self.model.save(os.path.join(path, self.model_name))
-        json.dump(self.sense_map, open(os.path.join(path, 'senses.json'), 'w'))
+        json.dump(self.sense_map, open(os.path.join(path, self.model_name, 'senses.json'), 'w'))
 
     def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         self.sense_map = {v: k for k, v in enumerate(
@@ -145,10 +149,11 @@ class AbstractArgumentExtractor(Component):
         ]
         if self.checkpoint_path:
             self.callbacks.append(
-                tf.keras.callbacks.ModelCheckpoint(os.path.join(self.checkpoint_path, self.model_name + '.ckp'),
+                tf.keras.callbacks.ModelCheckpoint(os.path.join(self.checkpoint_path, self.model_name, 'model.ckp'),
                                                    save_best_only=True,
                                                    save_weights_only=True))
-            self.callbacks.append(tf.keras.callbacks.CSVLogger(os.path.join(self.checkpoint_path, 'logs.csv')))
+            self.callbacks.append(tf.keras.callbacks.CSVLogger(os.path.join(self.checkpoint_path, self.model_name,
+                                                                            'logs.csv')))
         self.model.fit(
             ds_train,
             validation_data=ds_val,

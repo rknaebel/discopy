@@ -11,12 +11,12 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support, coh
 from sklearn_crfsuite import CRF
 
 from discopy.components.component import Component
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_parsed_conll_dataset
-from discopy.data.relation import Relation
-from discopy.data.sentence import DepRel
 from discopy.features import get_compressed_chain
 from discopy.utils import init_logger, encode_iob, decode_iob
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_parsed_conll_dataset
+from discopy_data.data.relation import Relation
+from discopy_data.data.sentence import DepRel
 
 logger = logging.getLogger('discopy')
 

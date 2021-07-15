@@ -12,10 +12,10 @@ from sklearn.metrics import precision_recall_fscore_support, accuracy_score, coh
 from sklearn.pipeline import Pipeline
 
 from discopy.components.component import SubComponent
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.features import get_connective_sentence_position, lca, get_pos_features
 from discopy.utils import init_logger
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_parsed_conll_dataset
 
 logger = logging.getLogger('discopy')
 

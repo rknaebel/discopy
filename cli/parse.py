@@ -1,11 +1,11 @@
 import os
 
-from discopy.data.update import update_dataset_parses
+from discopy_data.data.update import update_dataset_parses
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import click
 # TODO run on gpu raises error: supar sequence length datatype problem
-from discopy.data.loaders.raw import load_texts
+from discopy_data.data.loaders.raw import load_texts
 from discopy.parsers.utils import get_parser
 from discopy.utils import init_logger
 

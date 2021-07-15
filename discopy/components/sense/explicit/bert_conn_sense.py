@@ -11,11 +11,11 @@ from tqdm import tqdm
 
 from discopy.components.component import Component
 from discopy.components.connective.base import get_connective_candidates
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_bert_conll_dataset
-from discopy.data.relation import Relation
 from discopy.evaluate.conll import evaluate_docs, print_results
 from discopy.utils import init_logger
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_bert_conll_dataset
+from discopy_data.data.relation import Relation
 
 logger = logging.getLogger('discopy')
 
@@ -111,24 +111,25 @@ class ConnectiveSenseClassifier(Component):
         clf = ConnectiveSenseClassifier(config['input_dim'], config['used_context'])
         clf.sense_map = config['sense_map']
         clf.classes = config['classes']
+        return clf
 
     def load(self, path):
-        self.sense_map = json.load(open(os.path.join(path, 'senses.json'), 'r'))
+        self.sense_map = json.load(open(os.path.join(path, self.model_name, 'senses.json'), 'r'))
         self.classes = []
         for sense, sense_id in sorted(self.sense_map.items(), key=lambda x: x[1]):
             if len(self.classes) > sense_id:
                 continue
             self.classes.append(sense)
-        if not os.path.exists(os.path.join(path, f'conn_sense_nn.model')):
+        if not os.path.exists(os.path.join(path, self.model_name)):
             raise FileNotFoundError("Model not found.")
-        self.model = tf.keras.models.load_model(os.path.join(path, f'conn_sense_nn.model'),
+        self.model = tf.keras.models.load_model(os.path.join(path, self.model_name),
                                                 compile=False)
 
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
-        self.model.save(os.path.join(path, f'conn_sense_nn.model'))
-        json.dump(self.sense_map, open(os.path.join(path, 'senses.json'), 'w'))
+        self.model.save(os.path.join(path, self.model_name))
+        json.dump(self.sense_map, open(os.path.join(path, self.model_name, 'senses.json'), 'w'))
 
     def fit(self, docs_train: List[Document], docs_val: List[Document] = None):
         if docs_val is None:

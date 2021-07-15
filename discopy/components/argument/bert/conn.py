@@ -6,10 +6,10 @@ import click
 
 from discopy.components.argument.bert.abstract import AbstractArgumentExtractor
 from discopy.components.nn.windows import predict_discourse_windows_for_id, extract_windows
-from discopy.data.doc import Document
-from discopy.data.loaders.conll import load_bert_conll_dataset
-from discopy.data.relation import Relation
 from discopy.utils import init_logger
+from discopy_data.data.doc import Document
+from discopy_data.data.loaders.conll import load_bert_conll_dataset
+from discopy_data.data.relation import Relation
 
 logger = logging.getLogger('discopy')
 
@@ -20,6 +20,11 @@ class ConnectiveArgumentExtractor(AbstractArgumentExtractor):
     def __init__(self, window_length, input_dim, hidden_dim, rnn_dim, ckpt_path=''):
         super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=3, explicits_only=True,
                          positives_only=True, ckpt_path=ckpt_path)
+
+    @staticmethod
+    def from_config(config: dict):
+        return ConnectiveArgumentExtractor(window_length=config['window_length'], input_dim=config['input_dim'],
+                                           hidden_dim=config['hidden_dim'], rnn_dim=config['rnn_dim'])
 
     def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         if not relations:
