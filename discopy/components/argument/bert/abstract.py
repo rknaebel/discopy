@@ -130,9 +130,8 @@ class AbstractArgumentExtractor(Component):
                                     nb_classes=self.nb_classes,
                                     explicits_only=self.explicits_only,
                                     positives_only=self.positives_only)
-        print("train", ds_train.get_balanced_class_weights())
-        print("val", ds_val.get_balanced_class_weights())
-
+        logging.info(f"class weight balance (train) {ds_train.get_balanced_class_weights()}")
+        logging.info(f"class weight balance (val) {ds_val.get_balanced_class_weights()}")
         if not self.compiled:
             self.model.compile(loss=self.get_loss(ds_train.get_balanced_class_weights()),
                                optimizer=self.optimizer,
@@ -148,6 +147,7 @@ class AbstractArgumentExtractor(Component):
             SkMetrics(ds_val),
         ]
         if self.checkpoint_path:
+            os.makedirs(os.path.join(self.checkpoint_path, self.model_name), exist_ok=True)
             self.callbacks.append(
                 tf.keras.callbacks.ModelCheckpoint(os.path.join(self.checkpoint_path, self.model_name, 'model.ckp'),
                                                    save_best_only=True,
