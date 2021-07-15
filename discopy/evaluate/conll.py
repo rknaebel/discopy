@@ -3,20 +3,21 @@ from typing import List
 
 import numpy as np
 
-from discopy.data.doc import Document
-from discopy.data.relation import Relation
-from discopy.data.token import TokenSpan
+from discopy_data.data.doc import Document
+from discopy_data.data.relation import Relation
+from discopy_data.data.token import TokenSpan
 
 logger = logging.getLogger('discopy')
 
 
-def print_results(results):
+def print_results(results, title=''):
     """
     Args:
         results:
+        title:
     """
     logger.info('==========================================================')
-    logger.info('Evaluation for discourse relations:')
+    logger.info(f'Evaluation for discourse relations: {title}')
     logger.info('==========================================================')
     logger.info('Conn extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*results['conn']))
     logger.info('Arg1 extractor:               P {:<06.4} R {:<06.4} F1 {:<06.4}'.format(*results['arg1']))
