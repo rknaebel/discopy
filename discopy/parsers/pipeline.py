@@ -20,6 +20,9 @@ class ParserPipeline:
                 raise TypeError('Components should consist of Component instances only.')
 
     def __call__(self, doc: Document):
+        return self.parse_doc(doc)
+
+    def parse_doc(self, doc: Document):
         relations: List[Relation] = []
         for c in self.components:
             relations = c.parse(doc, relations)
@@ -43,7 +46,7 @@ class ParserPipeline:
         for c in self.components:
             c.save(path)
             configs.append(c.get_config())
-        json.dump(configs, open(os.path.join(path, 'config.json'), 'w'))
+        json.dump(configs, open(os.path.join(path, 'config.json'), 'w'), indent=2)
 
     @staticmethod
     def from_config(path):

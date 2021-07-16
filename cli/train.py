@@ -2,9 +2,9 @@ import os
 
 import click
 
-from discopy.data.loaders.conll import load_parsed_conll_dataset
 from discopy.parsers.utils import get_parser
 from discopy.utils import init_logger
+from discopy_data.data.loaders.conll import load_parsed_conll_dataset
 
 logger = init_logger()
 
