@@ -11,12 +11,12 @@ from discopy_data.data.doc import Document
 
 
 @click.command()
-@click.argument('model-path', type=str)
 @click.argument('bert-model', type=str)
+@click.argument('model-path', type=str)
 @click.option('-i', '--src', default='-', type=click.File('r'))
 @click.option('-o', '--tgt', default='-', type=click.File('w'))
 @click.option('-l', '--limit', default=0, type=int)
-def main(model_path, bert_model, src, tgt, limit):
+def main(bert_model, model_path, src, tgt, limit):
     logger = init_logger()
     logger.info('Init Parser...')
     parser = ParserPipeline.from_config(model_path)

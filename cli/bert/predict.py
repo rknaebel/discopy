@@ -10,9 +10,9 @@ from discopy_data.data.loaders.conll import load_bert_conll_dataset
 
 @click.command()
 @click.argument('bert-model', type=str)
-@click.argument('conll-path', type=str)
-@click.argument('cache-path', type=str)
 @click.argument('model-path', type=str)
+@click.argument('conll-path', type=str)
+@click.option('--cache-path', default='', type=str)
 @click.option('-o', '--tgt', default='-', type=click.File('w'))
 def main(bert_model, conll_path, cache_path, model_path, tgt):
     logger = init_logger()

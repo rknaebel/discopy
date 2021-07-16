@@ -15,21 +15,21 @@ setup(name='discopy-rknaebel',
       packages=find_packages(),
       install_requires=[
           'numpy>=1.18.0',
-          'cython',
           'nltk>=3.4',
           'joblib',
           'sklearn',
           'sklearn-crfsuite',
-          'ujson>=2.0.0',
-          'tensorflow>=2.1.0'
-          'spacy>=2.3.5',
-          'transformers>=3.5.0'
+          'tensorflow>=2.1.0',
+          'transformers>=3.5.0',
+          'fastapi==0.61.2',
+          'uvicorn==0.11.3',
+          'discopy-data-rknaebel',
       ],
       zip_safe=False,
       entry_points={
           'console_scripts': [
               'discopy-train=cli.train:main',
-              'discopy-test=cli.test:main',
+              'discopy-eval=cli.eval:main',
               'discopy-parse=cli.parse:main',
           ],
       },
