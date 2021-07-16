@@ -1,16 +1,12 @@
-import json
-import os
 from argparse import ArgumentParser
 
 import uvicorn
 from fastapi import FastAPI
 from pydantic.main import BaseModel
 
-from discopy.components.argument.bert.conn import ConnectiveArgumentExtractor
-from discopy.components.sense.explicit.bert_conn_sense import ConnectiveSenseClassifier
-from discopy.data.loaders.raw import load_texts
-from discopy.data.update import update_dataset_embeddings
 from discopy.parsers.pipeline import ParserPipeline
+from discopy_data.data.loaders.raw import load_texts
+from discopy_data.data.update import update_dataset_embeddings
 
 arg_parser = ArgumentParser()
 arg_parser.add_argument("--data-path", type=str, help="bert model name")
@@ -29,12 +25,7 @@ configs = None
 @app.on_event("startup")
 async def startup_event():
     global data, parser, configs
-    configs = json.load(open(os.path.join(args.model_path, 'config.json'), 'r'))
-    parser = ParserPipeline([
-        ConnectiveSenseClassifier(input_dim=configs[0]['input_dim'], used_context=configs[0]['used_context']),
-        ConnectiveArgumentExtractor(window_length=configs[1]['window_length'], input_dim=configs[1]['input_dim'],
-                                    hidden_dim=configs[1]['hidden_dim'], rnn_dim=configs[1]['rnn_dim']),
-    ])
+    parser = ParserPipeline.from_config(args.model_path)
     parser.load(args.model_path)
 
 
