@@ -3,11 +3,10 @@ from argparse import ArgumentParser
 import uvicorn
 from fastapi import FastAPI
 
-# TODO run on gpu raises error: supar sequence length datatype problem
-from discopy.data.loaders.raw import load_texts
-from discopy.data.update import update_dataset_parses
 from discopy.parsers.pipeline import ParserPipeline
 from discopy.parsers.utils import get_parser
+from discopy_data.data.loaders.raw import load_texts
+from discopy_data.data.update import update_dataset_parses
 
 arg_parser = ArgumentParser()
 arg_parser.add_argument("--hostname", default="0.0.0.0", type=str, help="REST API hostname")
