@@ -27,8 +27,10 @@ def get_fh(path):
 @click.argument('conll-path', type=click.Path())
 @click.argument('pred-path', type=click.Path())
 @click.option('-t', '--threshold', default=0.9, type=float)
-def main(conll_path, pred_path, threshold):
-    gold_docs = load_parsed_conll_dataset(conll_path, simple_connectives=True)
+@click.option('--simple-connectives', is_flag=True)
+@click.option('--sense-level', default=2, type=int)
+def main(conll_path, pred_path, threshold, simple_connectives, sense_level):
+    gold_docs = load_parsed_conll_dataset(conll_path, simple_connectives=simple_connectives, sense_level=sense_level)
     pred_docs = load_documents(get_fh(pred_path))
     pred_doc_ids = {doc.doc_id for doc in pred_docs}
     gold_docs = [doc for doc in gold_docs if doc.doc_id in pred_doc_ids]

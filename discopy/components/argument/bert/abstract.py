@@ -16,18 +16,19 @@ logger = logging.getLogger('discopy')
 
 
 class SkMetrics(tf.keras.callbacks.Callback):
-    def __init__(self, ds):
+    def __init__(self, ds, targets):
         super().__init__()
         y = [(windows, args) for windows, args in ds]
         self.windows = np.concatenate([windows for windows, args in y], axis=0)
         self.args = np.concatenate([args for windows, args in y], axis=0)
+        self.targets = targets
 
     def on_epoch_end(self, epoch, logs={}):
         y_pred = np.concatenate(self.model.predict(self.windows).argmax(-1))
         y = np.concatenate(self.args.argmax(-1))
         report = classification_report(y, y_pred,
                                        output_dict=False,
-                                       target_names=['None', 'Arg1', 'Arg2', 'Conn'], labels=range(4),
+                                       target_names=self.targets, labels=range(len(self.targets)),
                                        digits=4)
         logger.info("Classification Report EPOCH {}".format(epoch))
         for line in report.split('\n'):
@@ -58,6 +59,7 @@ class AbstractArgumentExtractor(Component):
         self.hidden_dim = hidden_dim
         self.rnn_dim = rnn_dim
         self.nb_classes = nb_classes
+        self.targets = ['None', 'Arg1', 'Arg2', 'Conn'][:len(self.nb_classes)]
         self.explicits_only = explicits_only
         self.positives_only = positives_only
         self.checkpoint_path = ckpt_path
@@ -144,7 +146,7 @@ class AbstractArgumentExtractor(Component):
             # tf.keras.callbacks.LearningRateScheduler(scheduler),
             tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, min_delta=0.001, restore_best_weights=True,
                                              verbose=1),
-            SkMetrics(ds_val),
+            SkMetrics(ds_val, self.targets),
         ]
         if self.checkpoint_path:
             os.makedirs(os.path.join(self.checkpoint_path, self.model_name), exist_ok=True)
@@ -175,7 +177,7 @@ class AbstractArgumentExtractor(Component):
         logger.info("Evaluation: {}".format(self.model_name))
         report = classification_report(y, y_pred,
                                        output_dict=False,
-                                       target_names=['None', 'Arg1', 'Arg2', 'Conn'], labels=range(4),
+                                       target_names=self.targets, labels=range(len(self.targets)),
                                        digits=4)
         logger.info("Classification Report")
         for line in report.split('\n'):
