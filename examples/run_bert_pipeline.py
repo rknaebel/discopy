@@ -5,10 +5,11 @@ import click
 
 from discopy.components.argument.bert.conn import ConnectiveArgumentExtractor
 from discopy.components.sense.explicit.bert_conn_sense import ConnectiveSenseClassifier
-from discopy.data.loaders.conll import load_bert_conll_dataset
+from discopy.components.sense.implicit.bert_adj_sentence import NonExplicitRelationClassifier
 from discopy.evaluate.conll import print_results, evaluate_docs
 from discopy.parsers.pipeline import ParserPipeline
 from discopy.utils import init_logger
+from discopy_data.data.loaders.conll import load_bert_conll_dataset
 
 logger = logging.getLogger('discopy')
 
@@ -47,6 +48,7 @@ def main(bert_model, conll_path, save_path, sense_lvl=2):
         ConnectiveSenseClassifier(input_dim=docs_val[0].get_embedding_dim(), used_context=1),
         ConnectiveArgumentExtractor(window_length=100, input_dim=docs_val[0].get_embedding_dim(), hidden_dim=256,
                                     rnn_dim=512, ckpt_path=save_path),
+        NonExplicitRelationClassifier(input_dim=docs_val[0].get_embedding_dim(), arg_length=50),
     ])
     logger.info('Train model')
     parser.fit(docs_train, docs_val)
