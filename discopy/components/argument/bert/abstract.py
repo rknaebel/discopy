@@ -59,7 +59,7 @@ class AbstractArgumentExtractor(Component):
         self.hidden_dim = hidden_dim
         self.rnn_dim = rnn_dim
         self.nb_classes = nb_classes
-        self.targets = ['None', 'Arg1', 'Arg2', 'Conn'][:len(self.nb_classes)]
+        self.targets = ['None', 'Arg1', 'Arg2', 'Conn'][:self.nb_classes]
         self.explicits_only = explicits_only
         self.positives_only = positives_only
         self.checkpoint_path = ckpt_path

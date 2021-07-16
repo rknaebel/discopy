@@ -56,17 +56,18 @@ def main(bert_model, conll_path, save_path, simple_connectives, sense_lvl=2):
     parser.save(save_path)
     logger.info('LOAD model')
     parser.load(save_path)
-    parser.score(docs_val)
-    logger.info('Evaluate parser TEST')
-    docs_test_expl = [d.with_relations(d.get_explicit_relations()) for d in docs_test]
-    test_preds = parser.parse(docs_test_expl)
-    print_results(evaluate_docs(docs_test_expl, test_preds, threshold=0.7), title='test-0.7')
-    print_results(evaluate_docs(docs_test_expl, test_preds, threshold=0.9), title='test-0.9')
-    logger.info('Evaluate parser BLIND')
-    docs_blind_expl = [d.with_relations(d.get_explicit_relations()) for d in docs_blind]
-    blind_preds = parser.parse(docs_blind_expl)
-    print_results(evaluate_docs(docs_blind_expl, blind_preds, threshold=0.7), title='blind-0.7')
-    print_results(evaluate_docs(docs_blind_expl, blind_preds, threshold=0.9), title='blind-0.9')
+    for title, docs_eval in [('TEST', docs_test), ('BLIND', docs_blind)]:
+        logger.info(f'Evaluate parser {title}')
+        test_preds = parser.parse(docs_eval)
+        for threshold in [0.7, 0.9]:
+            print_results(evaluate_docs(
+                [d.with_relations(d.get_explicit_relations()) for d in docs_eval],
+                [d.with_relations(d.get_explicit_relations()) for d in test_preds],
+                threshold=threshold), title=f'{title}-EXPLICIT-{threshold}')
+            print_results(evaluate_docs(
+                [d.with_relations([r for r in d.relations if not r.is_explicit()]) for d in docs_eval],
+                [d.with_relations([r for r in d.relations if not r.is_explicit()]) for d in test_preds],
+                threshold=threshold), title=f'{title}-NON-EXPLICIT-{threshold}')
 
 
 if __name__ == "__main__":
