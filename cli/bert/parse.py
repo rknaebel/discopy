@@ -12,7 +12,7 @@ from discopy_data.data.doc import Document
 
 @click.command()
 @click.argument('model-path', type=str)
-@click.option('-m', '--bert-model', default='bert-base-cased', type=str)
+@click.argument('bert-model', type=str)
 @click.option('-i', '--src', default='-', type=click.File('r'))
 @click.option('-o', '--tgt', default='-', type=click.File('w'))
 @click.option('-l', '--limit', default=0, type=int)
