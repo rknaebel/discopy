@@ -15,7 +15,7 @@ logger = logging.getLogger('discopy')
 
 
 class ExplicitArgumentExtractor(AbstractArgumentExtractor):
-    model_name = 'nea'
+    model_name = 'neural_explicit_extract'
 
     def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
         super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, explicits_only=True,
