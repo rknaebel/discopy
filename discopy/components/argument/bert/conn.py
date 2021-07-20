@@ -15,7 +15,7 @@ logger = logging.getLogger('discopy')
 
 
 class ConnectiveArgumentExtractor(AbstractArgumentExtractor):
-    model_name = 'nca'
+    model_name = 'neural_conn_arg_extract'
 
     def __init__(self, window_length, input_dim, hidden_dim, rnn_dim, ckpt_path=''):
         super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=3, explicits_only=True,
