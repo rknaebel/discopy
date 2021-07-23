@@ -2,12 +2,11 @@ import json
 
 import click
 from tqdm import tqdm
-from transformers import AutoTokenizer, TFAutoModel
 
-from discopy.components.nn.bert import get_sentence_embeddings
 from discopy.parsers.pipeline import ParserPipeline
 from discopy.utils import init_logger
 from discopy_data.data.doc import Document
+from discopy_data.nn.bert import get_sentence_embedder
 
 
 @click.command()
@@ -19,10 +18,9 @@ from discopy_data.data.doc import Document
 def main(bert_model, model_path, src, tgt, limit):
     logger = init_logger()
     logger.info('Init Parser...')
+    get_sentence_embeddings = get_sentence_embedder(bert_model)
     parser = ParserPipeline.from_config(model_path)
     parser.load(model_path)
-    tokenizer = AutoTokenizer.from_pretrained(bert_model)
-    model = TFAutoModel.from_pretrained(bert_model)
     logger.info('Load pre-trained Parser...')
     for line_i, line in tqdm(enumerate(src)):
         if limit and line_i >= limit:
@@ -32,7 +30,7 @@ def main(bert_model, model_path, src, tgt, limit):
             continue
         for sent_i, sent in enumerate(doc.sentences):
             sent_words = sent.tokens
-            embeddings = get_sentence_embeddings(sent_words, tokenizer, model)
+            embeddings = get_sentence_embeddings(sent_words)
             doc.sentences[sent_i].embeddings = embeddings
         doc = parser(doc)
         tgt.write(json.dumps(doc.to_json()) + '\n')
