@@ -12,54 +12,65 @@ You can easily install *discopy* by using pip:
 pip install git+https://github.com/rknaebel/discopy
 ```
 or you just clone the repository.
-The you can either install discopy through pip
+Then you can install discopy through pip
 ```shell script
 pip install -e path/to/discopy
 ```
 
 ## Usage
-*Discopy* currently supports different modes and distinguishes standard models and transformer based models.
+*Discopy* currently supports different modes and distinguishes standard feature-based models and neural-based (transformer) models.
 These example commands are executed from within the repository folder.
 
 ### Evaluation
 
 ```shell script
-python cli/eval.py lin path/to/model path/to/conll
+discopy-eval path/to/conll-gold path/to/prediction
 ```
 
 ### Standard Architecture
 
 #### Training
 ```shell script
-python cli/train.py lin path/to/model path/to/conll
+discopy-train lin path/to/model path/to/conll
 ```
 Training data format is json, the folder contains subfolders `en.{train,dev,test}` with files `relations.json` and `parses.json`.
 
 
 #### Prediction
 ```shell script
-python cli/predict.py -i path/to/some/textfile -m models/lin
+discopy-predict lin path/to/conll/en.part path/to/model/lin
 ```
 ```shell script
-python cli/parse.py -i path/to/some/textfile -m models/lin
+discopy-parse lin path/to/model/lin -i path/to/some/documents.json
 ```
+```shell script
+discopy-tokenize -i path/to/textfile | discopy-add-parses -c | discopy-parse lin models/lin
+```
+
 
 ### Neural Architecture
 Neural components are a little bit more complex and ofter require/allow for more hyper-parameters while designing the 
 component and throughout the training process.
 The training cli gives only a single component-parameter choice.
 For individual adaptions, one has to write its own training script.
- 
+The `bert-model` parameter corresponds to the huggingface transformers model names.
+
 #### Training
 ```shell script
-python cli/bert/train.py [BERT-MODEL] [MODEL-PATH] [CONLL-PATH]
+discopy-nn-train [BERT-MODEL] [MODEL-PATH] [CONLL-PATH]
 ```
 Training data format follows the one above.
 
 #### Prediction
 ```shell script
-python cli/bert/predict.py [BERT-MODEL] [MODEL-PATH] [CONLL-PATH]
+discopy-nn-predict [BERT-MODEL] [MODEL-PATH] [CONLL-PATH]
 ```
 ```shell script
-python cli/bert/parse.py [BERT-MODEL] [MODEL-PATH] --src [JSON-INPUT]
+discopy-nn-parse [BERT-MODEL] [MODEL-PATH] -i [JSON-INPUT]
+```
+```shell script
+cat path/to/textfile | discopy-nn-parse [BERT-MODEL] [MODEL-PATH]
+```
+```shell script
+discopy-tokenize --tokenize-only -i path/to/textfile | discopy-nn-parse bert-base-cased models/pipeline-bert-2
 ```
