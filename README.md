@@ -4,7 +4,10 @@ It consists of a parser pipeline architecture which stacks individual parser com
 The focus is currently on explicit relations that were handled first in most pipelines.
 Further, remaining sentence pairs without explicit sense relation are processed with the non-explicit component.
 The current implementation is following the Conll2016 implementation guidelines.
-It aaccepts PDTB2 CoNLL format as input for training and evaluation and mainly produces a line-based json document format.
+It accepts PDTB2 CoNLL format as input for training and evaluation and mainly produces a line-based json document format.
+
+The parser is presented at the CODI 2021 Workshop. For more information, checkout the paper 
+[discopy: A Neural System for Shallow Discourse Parsing](https://aclanthology.org/2021.codi-main.12/).
 
 ## Setup
 You can easily install *discopy* by using pip:
