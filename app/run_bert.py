@@ -9,7 +9,6 @@ from discopy_data.data.loaders.raw import load_texts
 from discopy_data.data.update import update_dataset_embeddings
 
 arg_parser = ArgumentParser()
-arg_parser.add_argument("--data-path", type=str, help="bert model name")
 arg_parser.add_argument("--hostname", default="0.0.0.0", type=str, help="REST API hostname")
 arg_parser.add_argument("--port", default=8080, type=int, help="REST API port")
 arg_parser.add_argument("--model-path", type=str, help="path to trained discourse parser")
@@ -19,18 +18,20 @@ args = arg_parser.parse_args()
 
 app = FastAPI()
 parser: ParserPipeline = None
-configs = None
 
 
 @app.on_event("startup")
 async def startup_event():
-    global data, parser, configs
+    global parser
     parser = ParserPipeline.from_config(args.model_path)
     parser.load(args.model_path)
 
 
 @app.get("/api/parser/config")
 def get_parser_config():
+    configs = []
+    for c in parser.components:
+        configs.append(c.get_config())
     return configs
 
 
@@ -47,4 +48,4 @@ def apply_parser(r: ParserRequest):
 
 
 if __name__ == '__main__':
-    uvicorn.run("app.run_bert:app", host=args.hostname, port=args.port, log_level="debug", reload=args.reload)
+    uvicorn.run("app.run_bert:app", host=args.hostname, port=args.port, reload=args.reload)
