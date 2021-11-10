@@ -42,6 +42,7 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
                 senses = (np.arange(senses.max() + 1) == senses[..., None]).astype(bool)
                 self.docs.append({
                     'doc_id': doc.doc_id,
+                    'embeddings': doc.get_embeddings(),
                     'nb': len(senses),
                     'windows': doc_windows,
                     'args': arg_labels,
@@ -57,7 +58,7 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
 
     def __getitem__(self, idx):
         idxs = self.instances[idx * self.batch_size:(idx + 1) * self.batch_size]
-        windows = np.stack([self.docs[doc_id]['windows'][i] for doc_id, i in idxs])
+        windows = np.stack([self.docs[doc_id]['embeddings'][self.docs[doc_id]['windows'][i]] for doc_id, i in idxs])
         args = np.stack([self.docs[doc_id]['args'][i] for doc_id, i in idxs])
         return windows, args
 
@@ -80,7 +81,8 @@ def extract_document_training_windows(doc: Document, sense_map, size=100, explic
         explicits_only:
         positives_only:
     """
-    bert_doc = doc.get_embeddings()
+    # bert_doc = doc.get_embeddings()
+    bert_doc = np.arange(len(doc.get_tokens()))
     left_side = size // 2
     right_size = size - left_side
     repeats = 3
@@ -88,13 +90,14 @@ def extract_document_training_windows(doc: Document, sense_map, size=100, explic
     if not len(doc_relations):
         return None
 
-    hashes = np.pad(bert_doc, pad_width=((size, size), (0, 0)), mode='constant', constant_values=0)
+    # hashes = np.pad(bert_doc, pad_width=((size, size), (0, 0)), mode='constant', constant_values=0)
+    hashes = np.pad(bert_doc, pad_width=size, mode='constant', constant_values=0)
     relations = get_relations_matrix(doc_relations, len(bert_doc), size)
     centroids = relations.argmax(1)
 
     # differentiate context and non-context embeddings
-    pos_word_window = np.zeros((len(relations) * repeats, size, hashes.shape[1]), dtype=float)
-    pos_rel_window = np.zeros((len(relations) * repeats, size), dtype=int)
+    pos_word_window = np.zeros((len(relations) * repeats, size), dtype=np.uint16)
+    pos_rel_window = np.zeros((len(relations) * repeats, size), dtype=np.uint8)
     pos_senses = np.repeat([sense_map.get(r.senses[0], 0) for r in doc_relations], repeats)
     i = 0
     for relation, centroid in zip(relations, centroids):
@@ -122,8 +125,8 @@ def extract_document_training_windows(doc: Document, sense_map, size=100, explic
             centroids_mask[centroids + r] = 1
 
         non_centroids = np.arange(len(centroids_mask))[centroids_mask == 0]
-        neg_word_window = np.zeros((len(non_centroids), size, hashes.shape[1]), dtype=float)
-        neg_rel_window = np.zeros((len(non_centroids), size), dtype=int)
+        neg_word_window = np.zeros((len(non_centroids), size), dtype=np.uint16)
+        neg_rel_window = np.zeros((len(non_centroids), size), dtype=np.uint8)
         for i, centroid in enumerate(non_centroids):
             neg_word_window[i, :] = hashes[centroid - left_side:centroid + right_size]
 
@@ -260,10 +263,10 @@ def reduce_relation_predictions(relations: List[Relation], max_distance: float =
             current = [next_rel]
 
     # filter invalid relations: either argument is empty
-    combined = [[r for r in rels if not r.is_empty()] for rels in combined]
+    combined = [[r for r in rels if r.is_valid()] for rels in combined]
     # TODO whats the best number of partial relations to depend on?
     combined = [rr for rr in combined if len(rr) > 2]
     combined = [major_merge_relations(rr) for rr in combined]
-    combined = [r for r in combined if not r.is_empty()]
+    combined = [r for r in combined if r.is_valid()]
 
     return combined
