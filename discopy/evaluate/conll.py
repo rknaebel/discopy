@@ -148,6 +148,8 @@ def compute_span_f1(g_index_set: TokenSpan, p_index_set: TokenSpan) -> float:
         g_index_set (TokenSpan):
         p_index_set (TokenSpan):
     """
+    g_index_set = g_index_set.without_punct()
+    p_index_set = p_index_set.without_punct()
     correct = g_index_set.overlap(p_index_set)
     if correct == 0:
         return 0.0
@@ -191,7 +193,7 @@ def compute_confusion_counts(gold_list: List[TokenSpan], predicted_list: List[To
     unmatched = np.ones(len(predicted_list), dtype=bool)
     for gold_span in gold_list:
         for i, predicted_span in enumerate(predicted_list):
-            if unmatched[i] and matching_fn(gold_span, predicted_span) > threshold:
+            if unmatched[i] and matching_fn(gold_span, predicted_span) >= threshold:
                 tp += 1
                 unmatched[i] = 0
                 break
@@ -240,6 +242,6 @@ def _link_gold_predicted(gold_list: List[Relation], predicted_list: List[Relatio
 
     for gi, gr in enumerate(gold_list):
         for pi, pr in enumerate(predicted_list):
-            if compute_span_f1(gr.arg1 | gr.arg2, pr.arg1 | pr.arg2) > threshold:
+            if compute_span_f1(gr.arg1 | gr.arg2, pr.arg1 | pr.arg2) >= threshold:
                 gold_to_predicted_map[gi] = pi
     return gold_to_predicted_map

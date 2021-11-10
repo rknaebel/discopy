@@ -22,13 +22,14 @@ logger = logging.getLogger('discopy')
 
 def get_conn_model(in_size, out_size, hidden_size, hidden_size2=256):
     x = y = tf.keras.layers.Input(shape=(in_size,), name='connective')
-    y = tf.keras.layers.Dense(hidden_size, activation='selu')(y)
-    y = tf.keras.layers.Dropout(0.2)(y)
-    y = tf.keras.layers.Dense(hidden_size2, activation='selu')(y)
-    y = tf.keras.layers.Dropout(0.2)(y)
+    y = tf.keras.layers.Dense(hidden_size, kernel_initializer='lecun_normal', activation='selu')(y)
+    y = tf.keras.layers.Dropout(0.3)(y)
+    y = tf.keras.layers.Dense(hidden_size2, kernel_initializer='lecun_normal', activation='selu')(y)
+    y = tf.keras.layers.Dropout(0.3)(y)
     y = tf.keras.layers.Dense(out_size, activation='softmax')(y)
     model = tf.keras.models.Model(x, y)
-    model.compile('adam', 'sparse_categorical_crossentropy', metrics=[
+    optimizer = tf.keras.optimizers.RMSprop()
+    model.compile(optimizer, 'sparse_categorical_crossentropy', metrics=[
         "accuracy",
     ])
     return model
@@ -89,18 +90,21 @@ class ConnectiveSenseClassifier(Component):
     model_name = 'explicit_sense_bert_classifier'
     used_features = ['vectors']
 
-    def __init__(self, input_dim, used_context: int = 0):
+    def __init__(self, input_dim, used_context: int = 0, hidden_dim: int = 2048):
         self.input_dim = input_dim
         self.used_context = used_context
         self.in_size = input_dim + 2 * used_context * input_dim
+        self.hidden_dim = hidden_dim
         self.sense_map = {}
         self.classes = []
         self.model = None
+        self.batch_size = 512
 
     def get_config(self):
         return {
             'model_name': self.model_name,
             'input_dim': self.input_dim,
+            'hidden_dim': self.hidden_dim,
             'used_context': self.used_context,
             'sense_map': self.sense_map,
             'classes': self.classes,
@@ -108,7 +112,7 @@ class ConnectiveSenseClassifier(Component):
 
     @staticmethod
     def from_config(config: dict):
-        clf = ConnectiveSenseClassifier(config['input_dim'], config['used_context'])
+        clf = ConnectiveSenseClassifier(config['input_dim'], config['used_context'], config['hidden_dim'])
         clf.sense_map = config['sense_map']
         clf.classes = config['classes']
         return clf
@@ -135,21 +139,21 @@ class ConnectiveSenseClassifier(Component):
         if docs_val is None:
             raise ValueError("Validation data is missing.")
         self.sense_map, self.classes = get_sense_mapping(docs_train)
-        self.model = get_conn_model(self.in_size, len(self.sense_map), 2048)
+        self.model = get_conn_model(self.in_size, len(self.sense_map), self.hidden_dim, 128)
         self.model.summary()
         print(self.sense_map, self.classes)
         x_train, y_train = generate_pdtb_features(docs_train, self.sense_map, used_context=self.used_context)
         x_val, y_val = generate_pdtb_features(docs_val, self.sense_map, used_context=self.used_context)
-        self.model.fit(x_train, y_train, validation_data=(x_val, y_val), verbose=1, shuffle=True, epochs=10,
-                       batch_size=256,
+        self.model.fit(x_train, y_train, validation_data=(x_val, y_val), verbose=1, shuffle=True, epochs=20,
+                       batch_size=self.batch_size,
                        callbacks=[
-                           tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0.001, patience=3, verbose=0,
+                           tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0.001, patience=7, verbose=0,
                                                             restore_best_weights=True),
-                           tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=4, verbose=0)
+                           tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=3, verbose=0)
                        ])
 
     def score_on_features(self, x, y):
-        y_pred = self.model.predict(x).argmax(-1)
+        y_pred = self.model.predict(x, batch_size=self.batch_size).argmax(-1)
         logger.info("Evaluation: Connective")
         logger.info("    Acc  : {:<06.4}".format(accuracy_score(y, y_pred)))
         prec, recall, f1, support = precision_recall_fscore_support(y, y_pred, average='macro')

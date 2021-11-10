@@ -1,6 +1,7 @@
 import discopy.components.argument.base
 import discopy.components.argument.bert.conn
 import discopy.components.argument.bert.explicit
+import discopy.components.argument.bert.implicit
 import discopy.components.argument.crf
 import discopy.components.argument.gosh
 import discopy.components.connective.base
@@ -9,6 +10,7 @@ import discopy.components.sense.explicit.base
 import discopy.components.sense.explicit.bert_conn_sense
 import discopy.components.sense.implicit.base
 import discopy.components.sense.implicit.bert_adj_sentence
+import discopy.components.sense.implicit.bert_arguments
 import discopy.parsers.pipeline
 
 components = [
@@ -16,6 +18,7 @@ components = [
     discopy.components.argument.base.ImplicitArgumentExtractor,
     discopy.components.argument.bert.conn.ConnectiveArgumentExtractor,
     discopy.components.argument.bert.explicit.ExplicitArgumentExtractor,
+    discopy.components.argument.bert.implicit.ImplicitArgumentExtractor,
     discopy.components.argument.crf.CRFArgumentExtractor,
     discopy.components.argument.gosh.GoshArgumentExtractor,
     discopy.components.connective.base.ConnectiveClassifier,
@@ -24,6 +27,7 @@ components = [
     discopy.components.sense.explicit.bert_conn_sense.ConnectiveSenseClassifier,
     discopy.components.sense.implicit.base.NonExplicitSenseClassifier,
     discopy.components.sense.implicit.bert_adj_sentence.NonExplicitRelationClassifier,
+    discopy.components.sense.implicit.bert_arguments.ArgumentSenseClassifier,
 ]
 
 component_register = {}

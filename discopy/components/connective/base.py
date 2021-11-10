@@ -28,7 +28,7 @@ lemmatizer = nltk.stem.WordNetLemmatizer()
 def get_connective_candidates(sentence: Sentence):
     chosen_indices = set()
     candidates = []
-    sentence = [w.surface.lower() for w in sentence.tokens]
+    sentence = [w.surface.lower().strip("'") for w in sentence.tokens]
     for word_idx, word in enumerate(sentence):
         if word_idx in chosen_indices:
             continue

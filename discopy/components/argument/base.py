@@ -285,7 +285,11 @@ class ExplicitArgumentExtractor(Component):
 
 
 class ImplicitArgumentExtractor(Component):
-    model_name = "implicit_argument_extractor"
+    model_name = "implicit_argument_base_extractor"
+
+    @staticmethod
+    def from_config(config: dict):
+        return ImplicitArgumentExtractor()
 
     def load(self, path: str):
         pass

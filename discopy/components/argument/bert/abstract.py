@@ -40,8 +40,7 @@ def get_model(max_seq_len, hidden_dim, rnn_dim, nb_classes, input_size):
     y = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(rnn_dim, return_sequences=True), name='rnn')(y)
     y = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(rnn_dim, return_sequences=True), name='rnn2')(y)
     y = tf.keras.layers.Dropout(0.2)(y)
-    y = tf.keras.layers.Dense(hidden_dim, activation='relu', name='dense',
-                              kernel_regularizer=tf.keras.regularizers.L2(l2=0.001))(y)
+    y = tf.keras.layers.Dense(hidden_dim, activation='relu', name='dense')(y)
     y = tf.keras.layers.Dropout(0.2)(y)
     y = tf.keras.layers.Dense(nb_classes, activation='softmax', name='args')(y)
     model = tf.keras.models.Model(x, y)
@@ -69,7 +68,7 @@ class AbstractArgumentExtractor(Component):
         self.compiled = False
         self.sense_map = {}
         self.callbacks = []
-        self.epochs = 25
+        self.epochs = 15
         self.batch_size = 512
         self.metrics = [
             tf.keras.metrics.Precision(name="precision"),
@@ -172,7 +171,7 @@ class AbstractArgumentExtractor(Component):
         y = [(windows, args) for windows, args in ds]
         windows = np.concatenate([windows for windows, args in y], axis=0)
         args = np.concatenate([args for windows, args in y], axis=0)
-        y_pred = np.concatenate(self.model.predict(windows).argmax(-1))
+        y_pred = np.concatenate(self.model.predict(windows, batch_size=self.batch_size).argmax(-1))
         y = np.concatenate(args.argmax(-1))
         logger.info("Evaluation: {}".format(self.model_name))
         report = classification_report(y, y_pred,
@@ -185,19 +184,3 @@ class AbstractArgumentExtractor(Component):
 
     def parse(self, doc: Document, relations: List[Relation] = None, **kwargs):
         raise NotImplementedError()
-
-# class FullArgumentExtractor(AbstractArgumentExtractor):
-#     def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
-#         super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, fn='naa', explicits_only=False,
-#                          positives_only=False)
-#
-#     def parse(self, doc: BertDocument, relations: List[Relation] = None,
-#               batch_size=64, strides=1, max_distance=0.5, **kwargs):
-#         offset = self.window_length // 2
-#         doc_bert = doc.get_embeddings()
-#         tokens = doc.get_tokens()
-#         windows = extract_windows(doc_bert, self.window_length, strides, offset)
-#         y_hat = self.model.predict(windows, batch_size=batch_size)
-#         relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
-#         relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
-#         return relations_hat

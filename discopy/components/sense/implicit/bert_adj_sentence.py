@@ -30,7 +30,8 @@ def get_model(arg_length, embdding_dim, out_size, hidden_rnn_size=512, hidden_de
     y = tf.keras.layers.BatchNormalization()(y)
     y = tf.keras.layers.Dense(out_size, activation='softmax')(y)
     model = tf.keras.models.Model([x1, x2], y)
-    model.compile('adam', 'sparse_categorical_crossentropy', metrics=[
+    optimizer = tf.keras.optimizers.Adam(amsgrad=True)
+    model.compile(optimizer, 'sparse_categorical_crossentropy', metrics=[
         "accuracy",
     ])
     return model
@@ -91,8 +92,10 @@ class NonExplicitRelationClassifier(Component):
     model_name = 'non_explicit_relation_classifier'
     used_features = ['vectors']
 
-    def __init__(self, input_dim, arg_length: int = 50):
+    def __init__(self, input_dim, arg_length: int = 50, hidden_dim: int = 512, rnn_dim: int = 256):
         self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.rnn_dim = rnn_dim
         self.arg_length = arg_length
         self.sense_map = {}
         self.classes = []
@@ -102,6 +105,8 @@ class NonExplicitRelationClassifier(Component):
         return {
             'model_name': self.model_name,
             'input_dim': self.input_dim,
+            'hidden_dim': self.hidden_dim,
+            'rnn_dim': self.rnn_dim,
             'arg_length': self.arg_length,
             'sense_map': self.sense_map,
             'classes': self.classes,
@@ -109,7 +114,8 @@ class NonExplicitRelationClassifier(Component):
 
     @staticmethod
     def from_config(config: dict):
-        clf = NonExplicitRelationClassifier(config['input_dim'], config['arg_length'])
+        clf = NonExplicitRelationClassifier(config['input_dim'], config['arg_length'], config['hidden_dim'],
+                                            config['rnn_dim'])
         clf.sense_map = config['sense_map']
         clf.classes = config['classes']
         return clf
@@ -137,14 +143,14 @@ class NonExplicitRelationClassifier(Component):
             raise ValueError("Validation data is missing.")
         self.sense_map, self.classes = get_sense_mapping(docs_train)
         self.model = get_model(self.arg_length, self.input_dim, len(self.sense_map),
-                               hidden_rnn_size=128, hidden_dense_size=128)
+                               hidden_rnn_size=self.rnn_dim, hidden_dense_size=self.hidden_dim)
         self.model.summary()
         x_train, y_train = generate_pdtb_features(docs_train, self.sense_map, self.arg_length)
         x_val, y_val = generate_pdtb_features(docs_val, self.sense_map, self.arg_length)
         self.model.fit(x_train, y_train, validation_data=(x_val, y_val), verbose=1, shuffle=True, epochs=25,
-                       batch_size=64,
+                       batch_size=256,
                        callbacks=[
-                           tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0.001, patience=10, verbose=0,
+                           tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0.001, patience=7, verbose=0,
                                                             restore_best_weights=True),
                            tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1)
                        ])

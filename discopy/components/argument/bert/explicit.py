@@ -21,6 +21,11 @@ class ExplicitArgumentExtractor(AbstractArgumentExtractor):
         super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, explicits_only=True,
                          positives_only=False)
 
+    @staticmethod
+    def from_config(config: dict):
+        return ExplicitArgumentExtractor(window_length=config['window_length'], input_dim=config['input_dim'],
+                                         hidden_dim=config['hidden_dim'], rnn_dim=config['rnn_dim'])
+
     def parse(self, doc: Document, relations: List[Relation] = None,
               batch_size=64, strides=1, max_distance=0.5, **kwargs):
         offset = self.window_length // 2
