@@ -39,7 +39,8 @@ single_connectives = {'accordingly', 'additionally', 'after', 'afterward', 'afte
                       'plus', 'previously', 'rather', 'regardless', 'separately', 'similarly',
                       'simultaneously', 'since', 'specifically', 'still', 'then', 'thereafter', 'thereby',
                       'therefore', 'though', 'thus', 'till', 'ultimately', 'unless', 'until', 'whereas',
-                      'while', 'yet'}
+                      'while', 'yet',
+                      'as', 'before', 'for', 'if', 'so', 'when'}
 
 multi_connectives = list(map(lambda s: s.split(' '), [
     'as a result',
@@ -50,18 +51,14 @@ multi_connectives = list(map(lambda s: s.split(' '), [
     'as much as',
     'as though',
     'as well',
-    'as',
     'before and after',
-    'before',
     'by comparison',
     'by contrast',
     'by then',
     'for example',
     'for instance',
-    'for',
     'if then',
     'if and when',
-    'if',
     'in addition',
     'in contrast',
     'in fact',
@@ -77,9 +74,7 @@ multi_connectives = list(map(lambda s: s.split(' '), [
     'on the contrary',
     'on the other hand',
     'so that',
-    'so',
     'when and if',
-    'when',
     'neither nor',
     'either or',
 ]))
