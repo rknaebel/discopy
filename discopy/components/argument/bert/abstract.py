@@ -16,16 +16,15 @@ logger = logging.getLogger('discopy')
 
 
 class SkMetrics(tf.keras.callbacks.Callback):
-    def __init__(self, ds, targets):
+    def __init__(self, ds, targets, batch_size=32):
         super().__init__()
-        y = [(windows, args) for windows, args in ds]
-        self.windows = np.concatenate([windows for windows, args in y], axis=0)
-        self.args = np.concatenate([args for windows, args in y], axis=0)
+        self.batch_size = batch_size
+        self.ds = ds
         self.targets = targets
 
     def on_epoch_end(self, epoch, logs={}):
-        y_pred = np.concatenate(self.model.predict(self.windows).argmax(-1))
-        y = np.concatenate(self.args.argmax(-1))
+        y_pred = np.concatenate([self.model.predict(windows).argmax(-1) for windows, args in self.ds]).flatten()
+        y = np.concatenate([args.argmax(-1) for windows, args in self.ds]).flatten()
         report = classification_report(y, y_pred,
                                        output_dict=False,
                                        target_names=self.targets, labels=range(len(self.targets)),
@@ -68,7 +67,7 @@ class AbstractArgumentExtractor(Component):
         self.compiled = False
         self.sense_map = {}
         self.callbacks = []
-        self.epochs = 15
+        self.epochs = 50
         self.batch_size = 512
         self.metrics = [
             tf.keras.metrics.Precision(name="precision"),
@@ -130,8 +129,11 @@ class AbstractArgumentExtractor(Component):
         ds_val = PDTBWindowSequence(docs_val, self.window_length, self.sense_map, batch_size=self.batch_size,
                                     nb_classes=self.nb_classes,
                                     explicits_only=self.explicits_only,
-                                    positives_only=self.positives_only)
+                                    positives_only=self.positives_only,
+                                    use_shuffle=False)
+        logging.info(f"Training samples: {len(ds_train.instances)} (Docs={len(ds_train.docs)})")
         logging.info(f"class weight balance (train) {ds_train.get_balanced_class_weights()}")
+        logging.info(f"Validation samples: {len(ds_val.instances)} (Docs={len(ds_val.docs)})")
         logging.info(f"class weight balance (val) {ds_val.get_balanced_class_weights()}")
         if not self.compiled:
             self.model.compile(loss=self.get_loss(ds_train.get_balanced_class_weights()),
@@ -140,12 +142,12 @@ class AbstractArgumentExtractor(Component):
             self.compiled = True
         self.model.summary()
         self.callbacks = [
-            tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=1, min_lr=0.00001,
+            tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=2, min_lr=0.00001,
                                                  verbose=2),
-            # tf.keras.callbacks.LearningRateScheduler(scheduler),
-            tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, min_delta=0.001, restore_best_weights=True,
+            tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, restore_best_weights=True,
                                              verbose=1),
-            SkMetrics(ds_val, self.targets),
+            # TODO fix metrics computation - gpu memory problems
+            # SkMetrics(ds_val, self.targets),
         ]
         if self.checkpoint_path:
             os.makedirs(os.path.join(self.checkpoint_path, self.model_name), exist_ok=True)
@@ -157,10 +159,11 @@ class AbstractArgumentExtractor(Component):
                                                                             'logs.csv')))
         self.model.fit(
             ds_train,
+            verbose=2,
             validation_data=ds_val,
             epochs=self.epochs,
             callbacks=self.callbacks,
-            max_queue_size=10,
+            max_queue_size=100,
         )
 
     def score(self, docs: List[Document]):
@@ -168,11 +171,8 @@ class AbstractArgumentExtractor(Component):
                                 nb_classes=self.nb_classes,
                                 explicits_only=self.explicits_only,
                                 positives_only=self.positives_only)
-        y = [(windows, args) for windows, args in ds]
-        windows = np.concatenate([windows for windows, args in y], axis=0)
-        args = np.concatenate([args for windows, args in y], axis=0)
-        y_pred = np.concatenate(self.model.predict(windows, batch_size=self.batch_size).argmax(-1))
-        y = np.concatenate(args.argmax(-1))
+        y_pred = np.concatenate([self.model.predict(windows).argmax(-1) for windows, args in ds]).flatten()
+        y = np.concatenate([args.argmax(-1) for windows, args in ds]).flatten()
         logger.info("Evaluation: {}".format(self.model_name))
         report = classification_report(y, y_pred,
                                        output_dict=False,

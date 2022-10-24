@@ -29,8 +29,9 @@ def get_class_weights(y, smooth_factor=0.0):
 
 class PDTBWindowSequence(tf.keras.utils.Sequence):
     def __init__(self, docs: List[Document], window_length: int, sense_map, batch_size: int, nb_classes: int,
-                 explicits_only: bool = False, positives_only: bool = False):
+                 explicits_only: bool = False, positives_only: bool = False, use_shuffle=True):
         self.rng = np.random.default_rng()
+        self.use_shuffle = use_shuffle
         self.docs = []
         for doc in tqdm(docs):
             extraction = extract_document_training_windows(doc, sense_map, window_length, explicits_only,
@@ -50,7 +51,8 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
                 })
         self.instances = np.array(
             [[doc_id, i] for doc_id, doc_windows in enumerate(self.docs) for i in range(doc_windows['nb'])])
-        self.rng.shuffle(self.instances)
+        if self.use_shuffle:
+            self.rng.shuffle(self.instances)
         self.batch_size = batch_size
 
     def __len__(self):
@@ -63,7 +65,8 @@ class PDTBWindowSequence(tf.keras.utils.Sequence):
         return windows, args
 
     def on_epoch_end(self):
-        self.rng.shuffle(self.instances)
+        if self.use_shuffle:
+            self.rng.shuffle(self.instances)
 
     def get_balanced_class_weights(self):
         y = np.concatenate([doc['args'] for doc in self.docs])

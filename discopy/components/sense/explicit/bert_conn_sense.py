@@ -188,25 +188,47 @@ class ConnectiveSenseClassifier(Component):
 
 
 @click.command()
-@click.argument('conll-path')
-def main(conll_path):
+@click.argument('bert-model', type=str)
+@click.argument('conll-path', type=str)
+@click.option('--simple-connectives', is_flag=True)
+@click.option('-s', '--sense-lvl', default=2, type=int)
+@click.option('--conn-length', default=2, type=int)
+@click.option('--conn-hidden-dim', default=2048, type=int)
+def main(bert_model, conll_path, simple_connectives, sense_lvl, conn_length, conn_hidden_dim):
     logger = init_logger()
     docs_val = load_bert_conll_dataset(os.path.join(conll_path, 'en.dev'),
-                                       cache_dir=os.path.join(conll_path, 'en.dev.bert-base-cased.joblib'))
+                                       simple_connectives=simple_connectives,
+                                       cache_dir=os.path.join(conll_path, f'en.dev.{bert_model}.joblib'),
+                                       bert_model=bert_model,
+                                       sense_level=sense_lvl)
+    docs_test = load_bert_conll_dataset(os.path.join(conll_path, 'en.test'),
+                                        simple_connectives=simple_connectives,
+                                        cache_dir=os.path.join(conll_path, f'en.test.{bert_model}.joblib'),
+                                        bert_model=bert_model,
+                                        sense_level=sense_lvl)
+    docs_blind = load_bert_conll_dataset(os.path.join(conll_path, 'en.blind-test'),
+                                         simple_connectives=simple_connectives,
+                                         cache_dir=os.path.join(conll_path, f'en.blind-test.{bert_model}.joblib'),
+                                         bert_model=bert_model,
+                                         sense_level=sense_lvl)
     docs_train = load_bert_conll_dataset(os.path.join(conll_path, 'en.train'),
-                                         cache_dir=os.path.join(conll_path, 'en.train.bert-base-cased.joblib'))
-    clf = ConnectiveSenseClassifier(input_dim=docs_val[0].get_embedding_dim(), used_context=2)
+                                         simple_connectives=simple_connectives,
+                                         cache_dir=os.path.join(conll_path, f'en.train.{bert_model}.joblib'),
+                                         bert_model=bert_model,
+                                         sense_level=sense_lvl)
+    clf = ConnectiveSenseClassifier(input_dim=docs_val[0].get_embedding_dim(), used_context=conn_length,
+                                    hidden_dim=conn_hidden_dim)
     logger.info('Train model')
     clf.fit(docs_train, docs_val)
-    logger.info('Evaluation on TRAIN')
-    clf.score(docs_train)
-    logger.info('Evaluation on TEST')
-    clf.score(docs_val)
-    # logger.info('Parse one document')
-    # print(docs_val[0].to_json())
-    print(clf.parse(docs_val[0], []))
-    preds = [d.with_relations(clf.parse(d)) for d in docs_val]
-    print_results(evaluate_docs(docs_val, preds))
+    for title, docs_eval in [('TEST', docs_test), ('BLIND', docs_blind)]:
+        logger.info(f'Evaluate parser {title}')
+        preds = [d.with_relations(clf.parse(d)) for d in docs_eval]
+        for threshold in [0.7, 0.95]:
+            res_explicit = evaluate_docs(
+                [d.with_relations(d.get_explicit_relations()) for d in docs_eval],
+                preds,
+                threshold=threshold)
+            print_results(res_explicit, title=f'{title}-EXPLICIT-{threshold}')
 
 
 if __name__ == "__main__":

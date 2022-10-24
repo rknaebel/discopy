@@ -3,6 +3,7 @@ import os
 from typing import List
 
 import click
+import tensorflow as tf
 
 from discopy.components.argument.bert.abstract import AbstractArgumentExtractor
 from discopy.components.nn.windows import predict_discourse_windows_for_id, reduce_relation_predictions, extract_windows
@@ -17,24 +18,33 @@ logger = logging.getLogger('discopy')
 class ExplicitArgumentExtractor(AbstractArgumentExtractor):
     model_name = 'neural_explicit_extract'
 
-    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim):
-        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, explicits_only=True,
+    def __init__(self, window_length, input_dim, hidden_dim, rnn_dim, explicits_only=True):
+        super().__init__(window_length, input_dim, hidden_dim, rnn_dim, nb_classes=4, explicits_only=explicits_only,
                          positives_only=False)
 
     @staticmethod
     def from_config(config: dict):
         return ExplicitArgumentExtractor(window_length=config['window_length'], input_dim=config['input_dim'],
-                                         hidden_dim=config['hidden_dim'], rnn_dim=config['rnn_dim'])
+                                         hidden_dim=config['hidden_dim'], rnn_dim=config['rnn_dim'],
+                                         explicits_only=config['explicits_only'])
 
     def parse(self, doc: Document, relations: List[Relation] = None,
               batch_size=64, strides=1, max_distance=0.5, **kwargs):
-        offset = self.window_length // 2
-        doc_bert = doc.get_embeddings()
-        tokens = doc.get_tokens()
-        windows = extract_windows(doc_bert, self.window_length, strides, offset)
-        y_hat = self.model.predict(windows, batch_size=batch_size)
-        relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
-        relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
+        logger.debug("GOLD RELATIONS")
+        for i, r in enumerate(relations):
+            logger.debug(f">> GOLD ({i}): {r}")
+        try:
+            offset = self.window_length // 2
+            doc_bert = doc.get_embeddings()
+            tokens = doc.get_tokens()
+            windows = tf.data.Dataset.from_tensor_slices(
+                extract_windows(doc_bert, self.window_length, strides, offset)).batch(batch_size)
+            y_hat = self.model.predict(windows)
+            relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
+            relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
+            logging.debug(f"PRED RELATIONS: {relations_hat}")
+        except:
+            relations_hat = []
         return relations_hat
 
 
