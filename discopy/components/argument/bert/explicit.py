@@ -42,6 +42,8 @@ class ExplicitArgumentExtractor(AbstractArgumentExtractor):
             y_hat = self.model.predict(windows)
             relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
             relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
+            for relation in relations_hat:
+                relation.type = "Explicit"
             logging.debug(f"PRED RELATIONS: {relations_hat}")
         except:
             relations_hat = []

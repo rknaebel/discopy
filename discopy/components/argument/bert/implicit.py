@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import classification_report
 
-from discopy.components.argument.bert.abstract import AbstractArgumentExtractor, SkMetrics
+from discopy.components.argument.bert.abstract import AbstractArgumentExtractor
 from discopy.components.nn.windows import predict_discourse_windows_for_id, reduce_relation_predictions, \
     extract_windows, PDTBWindowSequence
 from discopy.evaluate.conll import evaluate_docs, print_results
@@ -60,7 +60,7 @@ class ImplicitArgumentExtractor(AbstractArgumentExtractor):
                                                  verbose=2),
             tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=7, min_delta=0.001, restore_best_weights=True,
                                              verbose=1),
-            SkMetrics(ds_val, self.targets),
+            # SkMetrics(ds_val, self.targets),
         ]
         if self.checkpoint_path:
             os.makedirs(os.path.join(self.checkpoint_path, self.model_name), exist_ok=True)
@@ -110,6 +110,8 @@ class ImplicitArgumentExtractor(AbstractArgumentExtractor):
         y_hat = self.model.predict(windows, batch_size=batch_size)
         relations_hat = predict_discourse_windows_for_id(tokens, y_hat, strides, offset)
         relations_hat = reduce_relation_predictions(relations_hat, max_distance=max_distance)
+        for relation in relations_hat:
+            relation.type = "Implicit"
         relations.extend(relations_hat)
         return relations
 

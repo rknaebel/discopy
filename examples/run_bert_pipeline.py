@@ -4,9 +4,12 @@ import logging
 import os
 import random
 import time
+# from discopy.components.argument.bert.implicit import ImplicitArgumentExtractor
+from typing import List
 
-from discopy.components.argument.bert.implicit import ImplicitArgumentExtractor
+from discopy.components.argument.base import ImplicitArgumentExtractor
 from discopy.components.sense.implicit.bert_arguments import ArgumentSenseClassifier
+from discopy.conn_head_mapper import ConnHeadMapper
 from discopy_data.data.doc import Document
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -54,6 +57,25 @@ def print_results_latex(explicits, non_explicits, title=''):
     logger.info('{} & {} & {} \\\\'.format(title, explicit_values, non_explicit_values))
 
 
+# TODO check whether it makes more sense to move tokens from connective to arg2 instead of removing them entirely
+def simplify_connectives(docs: List[Document]):
+    chm = ConnHeadMapper()
+    for doc in docs:
+        for rel in filter(lambda r: (r.is_explicit() and (len(r.conn.get_character_spans()) == 1)), doc.relations):
+            head, head_idxs = chm.map_raw_connective(' '.join(t.surface for t in rel.conn.tokens))
+            rel.conn.tokens = [rel.conn.tokens[i] for i in head_idxs]
+
+
+def convert_sense_level(docs: List[Document], level):
+    def convert(s, lvl):
+        return '.'.join(s.split('.')[:lvl])
+
+    for doc in docs:
+        for rel in doc.relations:
+            if len(rel.senses):
+                rel.senses = [convert(s, level) for s in rel.senses]
+
+
 @click.command()
 @click.argument('bert-model', type=str)
 @click.argument('conll-path', type=str)
@@ -82,6 +104,10 @@ def main(bert_model, conll_path, save_path, cache_path, simple_connectives, sens
     docs = load_docs(conll_path)
     docs = load_bert_embeddings(docs, cache_dir=cache_path,
                                 bert_model=bert_model)
+    if simple_connectives:
+        simplify_connectives(docs)
+    if 0 < sense_lvl < 3:
+        convert_sense_level(docs, sense_lvl)
 
     docs_train, docs_test = split_train_test(docs)
     docs_train, docs_val = split_train_test(docs_train)
@@ -92,8 +118,9 @@ def main(bert_model, conll_path, save_path, cache_path, simple_connectives, sens
                                   hidden_dim=conn_hidden_dim),
         ConnectiveArgumentExtractor(window_length=expl_length, input_dim=docs_val[0].get_embedding_dim(),
                                     hidden_dim=args_hidden_dim, rnn_dim=args_rnn_dim),
-        ImplicitArgumentExtractor(window_length=impl_length, input_dim=docs_val[0].get_embedding_dim(),
-                                  hidden_dim=args_hidden_dim, rnn_dim=args_rnn_dim),
+        # ImplicitArgumentExtractor(window_length=impl_length, input_dim=docs_val[0].get_embedding_dim(),
+        #                           hidden_dim=args_hidden_dim, rnn_dim=args_rnn_dim),
+        ImplicitArgumentExtractor(),
         ArgumentSenseClassifier(input_dim=docs_val[0].get_embedding_dim(), arg_length=int(impl_length / 2),
                                 hidden_dim=impl_hidden_dim, rnn_dim=impl_rnn_dim),
     ])
