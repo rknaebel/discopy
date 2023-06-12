@@ -4,6 +4,6 @@ joblib
 sklearn
 sklearn-crfsuite
 tensorflow>=2.1.0
-transformers==4.2.1
+transformers==4.30.0
 fastapi==0.67.0
 git+git://github.com:rknaebel/discopy-data
